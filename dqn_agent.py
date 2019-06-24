@@ -9,6 +9,11 @@ class DQNAgent:
         self.update_target_network()
         
     def fit_batch(self, minibatch):
+        """
+        minibatch is a list of (observation, action, reward, next_observation, done) tuples
+        """
+        
+
         minibatch = pd.DataFrame(minibatch, 
                     columns=['observation', 'action', 'reward', 'next_state', 'done'])
 
