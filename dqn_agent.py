@@ -24,11 +24,11 @@ class DQNAgent:
         inputs = pd.DataFrame(minibatch.next_state.tolist())
         inputs['zeros'] = 0
         inputs['ones'] = 1
-        next_value_0 = self.target_network.predict(inputs[[0,1,2,3,'zeros']])
-        next_value_1 = self.target_network.predict(inputs[[0,1,2,3,'ones']])
+        next_value_0 = self.target_network.predict(inputs[[0,1,2,3,'zeros']].values)
+        next_value_1 = self.target_network.predict(inputs[[0,1,2,3,'ones']].values)
 
         # calculate target q values; set future values to 0 for terminal states
-        minibatch['next_state_max_q'] = np.maximum(next_value_0, next_value_1)
+        minibatch['next_state_max_q'] = np.maximum(next_value_0.detach().numpy(), next_value_1.detach().numpy())
         minibatch.loc[minibatch.done, 'next_state_max_q'] = 0
         minibatch['target_q_value'] = minibatch.reward + self.discount_rate * minibatch.next_state_max_q
 
@@ -43,5 +43,5 @@ class DQNAgent:
         
     def act(self,observation):
         inputs = np.array([np.append(observation,0), np.append(observation,1)])
-        action = np.argmax(self.q_network.predict(inputs))
+        action = np.argmax(self.q_network.predict(inputs).detach().numpy())
         return action
