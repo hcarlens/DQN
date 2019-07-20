@@ -16,8 +16,7 @@ class DQNAgent:
             nn.Linear(num_neurons, num_outputs))
         self.update_target_network()
         self.loss_fn = torch.nn.MSELoss()
-        self.optimiser = torch.optim.SGD(self.q_network.parameters(),
-                                          lr=learning_rate)
+        self.optimiser = torch.optim.RMSprop(self.q_network.parameters(), learning_rate)
 
     def fit_batch(self, minibatch):
         """
