@@ -6,7 +6,7 @@ class Trainer:
     """
     # todo: add deterministic mode
     """
-    def __init__(self, env, agent, memory_buffer, epsilon, obs_normalisation=[1,1,1,1], logdir='/logs'):
+    def __init__(self, env, agent, memory_buffer, epsilon, obs_normalisation=[1,1,1,1], logdir='/logs', timestep_to_start_learning = 1000):
         self.env = env
         self.total_steps = 0
         self.episode_lengths = []
@@ -23,7 +23,7 @@ class Trainer:
         self.optimizer_learning_rate = 0.00025
         self.buffer_length = 50000
         self.target_update_steps = 1000
-        self.timestep_to_start_learning = 1000
+        self.timestep_to_start_learning = timestep_to_start_learning
         
         self.obs_normalisation = obs_normalisation
         print('Trainer initialised')
