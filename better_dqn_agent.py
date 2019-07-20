@@ -1,21 +1,22 @@
 import torch
 
+
 class DQNAgent:
-    def __init__(self, network_generator, discount_rate):
+    def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons, num_outputs):
         self.discount_rate = discount_rate
         self.q_network = torch.nn.Sequential(
             nn.Linear(num_inputs, num_neurons),
             nn.ReLU(),
-            nn.Linear(num_neurons, 1)   
+            nn.Linear(num_neurons, num_outputs)   
             )
         self.target_network = torch.nn.Sequential(
             nn.Linear(num_inputs, num_neurons),
             nn.ReLU(),
-            nn.Linear(num_neurons, 1)   
+            nn.Linear(num_neurons, num_outputs)   
             )
         self.update_target_network()
         self.loss_fn = torch.nn.MSELoss()
-        self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=0.0025)
+        self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=learning_rate)
         
     def fit_batch(self, minibatch):
         """
@@ -31,6 +32,7 @@ class DQNAgent:
         terminal_indicators = torch.tensor(terminal_indicators, dtype=torch.long)
 
         # work out perceived value of next states
+        batch_size = len(observations)
         next_state_values = torch.zeros(batch_size)
 
         # value is non-zero only if the current state isn't terminal
@@ -38,7 +40,7 @@ class DQNAgent:
 
         expected_state_action_values = rewards + self.discount_rate * next_state_values
 
-        predicted_state_action_values = self.q_network(observations).gather(1, action_indices)
+        predicted_state_action_values = self.q_network(observations).gather(1, actions)
 
         self.loss_fn(expected_state_action_values, predicted_state_action_values.squeeze())
 
@@ -48,7 +50,5 @@ class DQNAgent:
         self.target_network.load_state_dict(self.q_network.state_dict())
         
     def act(self, observation):
-
-        inputs = np.array([np.append(observation,0), np.append(observation,1)])
-        action = np.argmax(self.q_network.predict(inputs).detach().numpy())
+        action = self.q_network(observation).max(1)[0].detach().numpy()
         return action
