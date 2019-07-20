@@ -5,6 +5,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+torch.manual_seed(0)
+
+
 class QNetwork:
     """
     Neural net as Q-function approximator. 
