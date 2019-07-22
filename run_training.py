@@ -12,7 +12,7 @@ torch.manual_seed(0)
 env = gym.make('CartPole-v0')
 env.seed(0)
 
-dqn_agent = DQNAgent(learning_rate=0.01, 
+dqn_agent = DQNAgent(learning_rate=0.0025, 
                      discount_rate=0.9,
                      num_inputs=4,
                      num_neurons=32,
@@ -26,11 +26,10 @@ trainer = Trainer(
     start_epsilon=1, 
     timestep_to_start_learning=1000,
     batch_size=32,
-    target_update_steps=1000,
+    target_update_steps=500,
     epsilon_decay_rate=0.99
 )
-
-trainer.run(num_episodes=500)
+trainer.run(num_episodes=5000)
 
 plt.plot(trainer.episode_lengths)
 plt.show()

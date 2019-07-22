@@ -12,10 +12,10 @@ class DQNAgent:
         """
         minibatch is a list of (observation, action, reward, next_observation, done) tuples
         """
-        
 
-        minibatch = pd.DataFrame(minibatch, 
-                    columns=['observation', 'action', 'reward', 'next_state', 'done'])
+        observations, actions, rewards, next_observations, terminal_indicators = [*zip(*minibatch)]
+
+        observations = torch.tensor(observatoins, dtype=torch.float)
 
         # get max q values for the next state
         # todo: clean this up! Review and compare against baseline implementations

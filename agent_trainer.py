@@ -1,8 +1,8 @@
 import numpy as np
 import random
+from torch.utils.tensorboard import SummaryWriter
 
 random.seed(0)
-
 
 class Trainer:
     """
@@ -38,8 +38,14 @@ class Trainer:
         
         self.total_steps = 0
         self.episode_lengths = []
-        self.buffer_sizes = []
-        self.zero_action_pcts = []
+        self.loss_values = []
+
+        self.writer = SummaryWriter(comment=f'batch_size_{self.batch_size}_target_update_{self.target_update_steps}')
+
+        # todo: generalise the below. Does this need to be moved? 
+        #self.writer.add_graph('policy_net', agent.q_network)
+        #self.writer.add_graph(agent.target_network)
+
 
         print('Trainer initialised.')
 
@@ -74,21 +80,32 @@ class Trainer:
                     minibatch = self.memory_buffer.sample_minibatch(
                         self.batch_size)
 
-                    self.agent.fit_batch(minibatch)
+                    loss, q_values = self.agent.fit_batch(minibatch)
+                    self.writer.add_scalar('Loss', loss, global_step=self.total_steps)
+                    self.writer.add_histogram('Q_values', q_values, global_step=self.total_steps)
+                    self.loss_values.append(loss)
+
 
                 observation = next_observation
                 self.total_steps += 1
                 if done or t == self.max_num_steps - 1:
                     break
 
+            self.writer.add_scalar('Episode_timesteps', t, global_step=self.total_steps)
+            self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.total_steps)  
             self.episode_lengths.append(t)
-            self.buffer_sizes.append(self.memory_buffer.current_length)
-            self.zero_action_pcts.append(
-                sum(current_actions) / len(current_actions))
+            self.writer.add_scalar('Action_zero_pct',  sum(current_actions) / len(current_actions), global_step=self.total_steps)  
+            self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.total_steps)  
+
+
+            if self.loss_values:
+                loss_min, loss_mean, loss_max = min(self.loss_values[-100:]), np.mean(self.loss_values[-100:]), max(self.loss_values[-100:])
+            else:
+                loss_min, loss_mean, loss_max = np.inf, np.inf, np.inf
 
             if e % 10 == 0:
                 print(
-                    f"Episode {e} finished after {t+1} timesteps. 100 ep running avg {np.floor(np.average(self.episode_lengths[-100:]))}. Epsilon {self.epsilon:.2f}. Buffer length: {self.buffer_sizes[-1]}. Zero actions: {self.zero_action_pcts[-1]:.2f}"
+                    f"Ep {e}; {t+1} steps. 100 ep ravg: {np.floor(np.average(self.episode_lengths[-100:]))}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
                 )
 
             # decrease epsilon value

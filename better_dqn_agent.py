@@ -60,6 +60,8 @@ class DQNAgent:
         #     param.grad.data.clamp_(-1,1)
         self.optimiser.step()
 
+        return loss.detach().numpy(), predicted_state_action_values.detach()
+
 
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())
