@@ -96,6 +96,7 @@ class Trainer:
             self.episode_lengths.append(t)
             self.writer.add_scalar('Action_zero_pct',  sum(current_actions) / len(current_actions), global_step=self.total_steps)  
             self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.total_steps)  
+            self.writer.add_scalar('running_average_100_trials', np.mean(self.episode_lengths[-100:]), global_step=self.total_steps)
 
 
             if self.loss_values:
