@@ -1,8 +1,7 @@
 import numpy as np
+import torch
 import random
 from torch.utils.tensorboard import SummaryWriter
-
-random.seed(0)
 
 class Trainer:
     """
@@ -21,7 +20,8 @@ class Trainer:
                  buffer_length=50000,
                  target_update_steps=1000,
                  max_num_steps=200,
-                 end_epsilon=0.01):
+                 end_epsilon=0.01,
+                 random_seed=None):
         self.env = env
         self.epsilon = start_epsilon
         self.agent = agent
@@ -42,10 +42,13 @@ class Trainer:
 
         self.writer = SummaryWriter(comment=f'batch_size_{self.batch_size}_target_update_{self.target_update_steps}')
 
-        # todo: generalise the below. Does this need to be moved? 
-        #self.writer.add_graph('policy_net', agent.q_network)
-        #self.writer.add_graph(agent.target_network)
-
+        if random_seed is not None:
+            # seed all the things
+            agent.seed(random_seed)
+            env.seed(random_seed)
+            env.action_space.seed(random_seed)
+            np.random.seed(random_seed)
+            random.seed(random_seed)
 
         print('Trainer initialised.')
 

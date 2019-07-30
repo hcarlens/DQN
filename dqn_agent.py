@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-torch.manual_seed(0)
-
 
 class DQNAgent:
     def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons,
@@ -17,6 +15,10 @@ class DQNAgent:
         self.update_target_network()
         self.loss_fn = torch.nn.MSELoss()
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), learning_rate)
+
+    def seed(self, random_seed):
+        # seed pytorch
+        torch.manual_seed(random_seed)
 
     def fit_batch(self, minibatch):
         """
