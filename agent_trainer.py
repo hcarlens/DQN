@@ -43,14 +43,17 @@ class Trainer:
         self.writer = SummaryWriter(comment=f'batch_size_{self.batch_size}_target_update_{self.target_update_steps}')
 
         if random_seed is not None:
-            # seed all the things
-            agent.seed(random_seed)
-            env.seed(random_seed)
-            env.action_space.seed(random_seed)
-            np.random.seed(random_seed)
-            random.seed(random_seed)
+            self.seed(random_seed)
 
         print('Trainer initialised.')
+
+    def seed(self, random_seed):
+            # seed all the things
+            self.agent.seed(random_seed)
+            self.env.seed(random_seed)
+            self.env.action_space.seed(random_seed)
+            np.random.seed(random_seed)
+            random.seed(random_seed)
 
     def run(self, num_episodes):
         # run through episodes

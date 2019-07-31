@@ -2,16 +2,27 @@ import torch
 import torch.nn as nn
 
 
+class QNetwork(torch.nn.Module):
+    def __init__(self, num_inputs, num_neurons, num_outputs):
+        super().__init__()
+        self.linear1 = torch.nn.Linear(num_inputs, num_neurons)
+        self.linear2 = torch.nn.Linear(num_neurons, num_outputs)
+
+    def forward(self, x):
+        h_relu = self.linear1(x).clamp(min=0)
+        y_pred = self.linear2(h_relu)
+        return y_pred
+
 class DQNAgent:
     def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons,
-                 num_outputs):
+                 num_outputs, random_seed=None):
+        
+        if random_seed is not None:
+            self.seed(random_seed)
+
         self.discount_rate = discount_rate
-        self.q_network = torch.nn.Sequential(
-            nn.Linear(num_inputs, num_neurons), nn.ReLU(),
-            nn.Linear(num_neurons, num_outputs))
-        self.target_network = torch.nn.Sequential(
-            nn.Linear(num_inputs, num_neurons), nn.ReLU(),
-            nn.Linear(num_neurons, num_outputs))
+        self.q_network = QNetwork(num_inputs, num_neurons, num_outputs)
+        self.target_network = QNetwork(num_inputs, num_neurons, num_outputs)
         self.update_target_network()
         self.loss_fn = torch.nn.MSELoss()
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), learning_rate)
