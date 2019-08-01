@@ -1,7 +1,9 @@
 import numpy as np
 import torch
 import random
+from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
+import os
 
 class Trainer:
     """
@@ -21,7 +23,8 @@ class Trainer:
                  target_update_steps=1000,
                  max_num_steps=200,
                  end_epsilon=0.01,
-                 random_seed=None):
+                 random_seed=None,
+                 name='DQN'):
         self.env = env
         self.epsilon = start_epsilon
         self.agent = agent
@@ -35,12 +38,14 @@ class Trainer:
         self.target_update_steps = target_update_steps
         self.timestep_to_start_learning = timestep_to_start_learning
 
+        self.name = name
+
         
         self.total_steps = 0
         self.episode_lengths = []
         self.loss_values = []
 
-        self.writer = SummaryWriter(comment=f'batch_size_{self.batch_size}_target_update_{self.target_update_steps}')
+        self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + name))
 
         if random_seed is not None:
             self.seed(random_seed)

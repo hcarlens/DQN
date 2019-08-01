@@ -3,29 +3,51 @@ import torch.nn as nn
 
 
 class QNetwork(torch.nn.Module):
-    def __init__(self, num_inputs, num_neurons, num_outputs):
+    def __init__(self, num_inputs, num_neurons, num_outputs, duelling=True):
         super().__init__()
         self.linear1 = torch.nn.Linear(num_inputs, num_neurons)
-        self.linear2 = torch.nn.Linear(num_neurons, num_outputs)
+        self.duelling = duelling
+        if self.duelling:
+            self.linear2_value = torch.nn.Linear(num_neurons, num_outputs)
+            self.linear2_advantage = torch.nn.Linear(num_neurons, num_outputs)
+        else:
+            self.linear2 = torch.nn.Linear(num_neurons, num_outputs)
 
     def forward(self, x):
         h_relu = self.linear1(x).clamp(min=0)
-        y_pred = self.linear2(h_relu)
-        return y_pred
+        if self.duelling:
+            values = self.linear2_value(h_relu)
+            advantages = self.linear2_advantage(h_relu)
+            qs = values + advantages - torch.max(advantages, dim=-1, keepdim=True)[0]
+        else:
+            qs = self.linear2(h_relu)
+        return qs
 
 class DQNAgent:
     def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons,
-                 num_outputs, random_seed=None):
+                 num_outputs, random_seed=None, duelling=True, loss_type='mse', optimiser='adam'):
         
         if random_seed is not None:
             self.seed(random_seed)
 
         self.discount_rate = discount_rate
-        self.q_network = QNetwork(num_inputs, num_neurons, num_outputs)
-        self.target_network = QNetwork(num_inputs, num_neurons, num_outputs)
+        self.q_network = QNetwork(num_inputs, num_neurons, num_outputs, duelling=duelling)
+        self.target_network = QNetwork(num_inputs, num_neurons, num_outputs, duelling=duelling)
         self.update_target_network()
-        self.loss_fn = torch.nn.MSELoss()
-        self.optimiser = torch.optim.Adam(self.q_network.parameters(), learning_rate)
+
+        if loss_type == 'mse':
+            self.loss_fn = torch.nn.MSELoss()
+        elif loss_type == 'huber':
+            self.loss_fn = torch.nn.SmoothL1Loss()
+
+        if optimiser == 'adam':
+            self.optimiser = torch.optim.Adam(self.q_network.parameters(), learning_rate)
+        elif optimiser == 'rmsprop':
+            self.optimiser = torch.optim.RMSprop(self.q_network.parameters(), learning_rate)
+        elif optimiser == 'sgd':
+            self.optimiser = torch.optim.SGD(self.q_network.parameters(), learning_rate)
+        elif optimiser == 'sgd_momentum':
+            self.optimiser = torch.optim.SGD(self.q_network.parameters(), learning_rate, momentum=0.9)
 
     def seed(self, random_seed):
         # seed pytorch
