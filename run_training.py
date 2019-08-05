@@ -2,9 +2,9 @@ import gym
 import matplotlib.pyplot as plt
 import torch
 
-from dqn_agent import DQNAgent
-from agent_trainer import Trainer
-from memory_buffer import MemoryBuffer
+from pytorch_rl.dqn_agent import DQNAgent
+from pytorch_rl.agent_trainer import Trainer
+from pytorch_rl.memory_buffer import MemoryBuffer
 import random
 
 RANDOM_SEED = 1
