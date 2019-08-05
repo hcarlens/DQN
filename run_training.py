@@ -5,18 +5,25 @@ import torch
 from pytorch_rl.dqn_agent import DQNAgent
 from pytorch_rl.agent_trainer import Trainer
 from pytorch_rl.memory_buffer import MemoryBuffer
+import pytorch_rl.utils as utils
+from pytorch_rl.utils import loss_functions, optimisers
 import random
 
 RANDOM_SEED = 1
 
 env = gym.make('CartPole-v0')
 
+loss_fn = loss_functions['mse']
+optimiser = optimisers['adam']
+
 dqn_agent = DQNAgent(learning_rate=0.00025, 
                      discount_rate=0.99,
                      num_inputs=4,
                      num_neurons=64,
                      num_outputs=2,#
-                     random_seed=RANDOM_SEED
+                     random_seed=RANDOM_SEED,
+                     loss_fn=loss_fn,
+                     optimiser=optimiser
                     )
 
 trainer = Trainer(

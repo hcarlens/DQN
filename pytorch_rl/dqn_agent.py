@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-# ! TODO: look at __all__ for exposing subsets of functions
-
 class QNetwork(torch.nn.Module):
     def __init__(self, num_inputs, num_neurons, num_outputs, duelling=True):
         super().__init__()
@@ -26,7 +24,8 @@ class QNetwork(torch.nn.Module):
 
 class DQNAgent:
     def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons,
-                 num_outputs, random_seed=None, duelling=True, loss_type='mse', optimiser='adam'):
+                 num_outputs, loss_fn, optimiser, random_seed=None, duelling=True,
+                 gradient_clipping_value=None, gradient_clipping_norm=None):
         
         if random_seed is not None:
             self.seed(random_seed)
@@ -35,22 +34,10 @@ class DQNAgent:
         self.q_network = QNetwork(num_inputs, num_neurons, num_outputs, duelling=duelling)
         self.target_network = QNetwork(num_inputs, num_neurons, num_outputs, duelling=duelling)
         self.update_target_network()
-
-
-        # ! TODO: pass in loss_fn/optimiser class
-        if loss_type == 'mse':
-            self.loss_fn = torch.nn.MSELoss()
-        elif loss_type == 'huber':
-            self.loss_fn = torch.nn.SmoothL1Loss()
-
-        if optimiser == 'adam':
-            self.optimiser = torch.optim.Adam(self.q_network.parameters(), learning_rate)
-        elif optimiser == 'rmsprop':
-            self.optimiser = torch.optim.RMSprop(self.q_network.parameters(), learning_rate)
-        elif optimiser == 'sgd':
-            self.optimiser = torch.optim.SGD(self.q_network.parameters(), learning_rate)
-        elif optimiser == 'sgd_momentum':
-            self.optimiser = torch.optim.SGD(self.q_network.parameters(), learning_rate, momentum=0.9)
+        self.loss_fn = loss_fn()
+        self.optimiser = optimiser(params=self.q_network.parameters(), lr= learning_rate)
+        self.gradient_clipping_value = gradient_clipping_value
+        self.gradient_clipping_norm = gradient_clipping_norm
 
     def seed(self, random_seed):
         # seed pytorch
@@ -71,7 +58,7 @@ class DQNAgent:
         next_observations = torch.tensor(next_observations, dtype=torch.float)
 
         # NOTE: for some reason we can use these as indices when uint8, but not when long
-        terminal_indicators = torch.tensor(terminal_indicators,
+        non_terminal_states = 1 - torch.tensor(terminal_indicators,
                                            dtype=torch.uint8)
 
         # work out perceived value of next states
@@ -80,8 +67,8 @@ class DQNAgent:
 
         # value is non-zero only if the current state isn't terminal
         # ! TODO: complement outside; rename to non_terminal_states
-        next_state_values[1 - terminal_indicators] = self.target_network(
-            next_observations[1 - terminal_indicators]).max(1)[0].detach()
+        next_state_values[non_terminal_states] = self.target_network(
+            next_observations[non_terminal_states]).max(1)[0].detach()
 
         expected_state_action_values = rewards + self.discount_rate * next_state_values
 
@@ -95,8 +82,12 @@ class DQNAgent:
         self.optimiser.zero_grad()
         loss.backward()
 
-        # for param in self.q_network.parameters():
-        #     param.grad.data.clamp_(-1,1)
+        # clip the gradients if we need to
+        if self.gradient_clipping_value is not None:
+            torch.nn.utils.clip_grad_value_(self.q_network.parameters, self.gradient_clipping_threshold)
+        if self.gradient_clipping_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.q_network.parameters, self.gradient_clipping_threshold)
+
         self.optimiser.step()
 
         return loss.detach().numpy(), predicted_state_action_values.detach()
