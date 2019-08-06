@@ -24,7 +24,8 @@ class Trainer:
                  max_num_steps=200,
                  end_epsilon=0.01,
                  random_seed=None,
-                 name='DQN'):
+                 name='DQN',
+                 observation_pre_processor=lambda x:x):
         self.env = env
         self.epsilon = start_epsilon
         self.agent = agent
@@ -38,14 +39,17 @@ class Trainer:
         self.target_update_steps = target_update_steps
         self.timestep_to_start_learning = timestep_to_start_learning
 
-        self.name = name
+        self.observation_pre_processor = observation_pre_processor
 
+        self.name = name
         
         self.total_steps = 0
+        self.episode_rewards = []
         self.episode_lengths = []
         self.loss_values = []
 
-        self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + name))
+        self.model_name = datetime.now().strftime('%Y_%m_%d') + datetime.now().strftime('%H_%M_%S_') + name
+        self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + self.name))
 
         if random_seed is not None:
             self.seed(random_seed)
@@ -64,7 +68,13 @@ class Trainer:
         # run through episodes
         for e in range(num_episodes):
             observation = self.env.reset()
+
+            # preprocess observation
+            observation = self.observation_pre_processor(observation)
+
             current_actions = []
+
+            episode_reward = 0
 
             for t in range(self.max_num_steps):
                 # set the target network weights to be the same as the q-network ones every so often
@@ -75,11 +85,19 @@ class Trainer:
                 # with probability epsilon, choose a random action
                 # otherwise use Q-network to pick action
                 if random.uniform(0, 1) < self.epsilon:
-                    action = self.env.action_space.sample()
+                    action = random.randint(0, 2)
+                    # ! FIX! hardcoded action space for Pong.
+                    #self.env.action_space.sample()
                 else:
-                    action = self.agent.act(observation).item()
+                    action = self.agent.act(observation )
 
                 next_observation, reward, done, info = self.env.step(action)
+
+                episode_reward += reward
+
+                # preprocess observation
+                next_observation = self.observation_pre_processor(next_observation)
+
                 current_actions.append(action)
 
                 # add memory to buffer
@@ -102,12 +120,17 @@ class Trainer:
                 if done or t == self.max_num_steps - 1:
                     break
 
-            self.writer.add_scalar('Episode_timesteps', t, global_step=self.total_steps)
-            self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.total_steps)  
             self.episode_lengths.append(t)
+            self.episode_rewards.append(episode_reward)
+
+
+            self.writer.add_scalar('Episode_timesteps', t, global_step=self.total_steps)
+            self.writer.add_scalar('Episode_rewards', episode_reward, global_step=self.total_steps)
+            self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.total_steps)  
             self.writer.add_scalar('Action_zero_pct',  sum(current_actions) / len(current_actions), global_step=self.total_steps)  
             self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.total_steps)  
-            self.writer.add_scalar('running_average_100_trials', np.mean(self.episode_lengths[-100:]), global_step=self.total_steps)
+            self.writer.add_scalar('running_average_timesteps_100_trials', np.mean(self.episode_lengths[-100:]), global_step=self.total_steps)
+            self.writer.add_scalar('running_average_rewards_100_trials', np.mean(self.episode_rewards[-100:]), global_step=self.total_steps)
 
 
             if self.loss_values:
@@ -115,9 +138,9 @@ class Trainer:
             else:
                 loss_min, loss_mean, loss_max = np.inf, np.inf, np.inf
 
-            if e % 10 == 0:
+            if e % 1 == 0:
                 print(
-                    f"Ep {e}; {t+1} steps. 100 ep ravg: {np.floor(np.average(self.episode_lengths[-100:]))}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
+                    f"Ep {e}; {t+1} steps. {episode_reward} reward. 100 ep ravg: {np.floor(np.average(self.episode_rewards[-100:]))}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
                 )
 
             # decrease epsilon value

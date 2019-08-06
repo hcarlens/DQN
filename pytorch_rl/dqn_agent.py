@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-class QNetwork(torch.nn.Module):
-    def __init__(self, num_inputs, num_neurons, num_outputs, duelling=True):
+class FCNNQNetwork(torch.nn.Module):
+    def __init__(self, num_inputs, num_outputs, num_neurons=64, duelling=True):
         super().__init__()
         self.linear1 = torch.nn.Linear(num_inputs, num_neurons)
         self.duelling = duelling
@@ -22,17 +22,53 @@ class QNetwork(torch.nn.Module):
             qs = self.linear2(h_relu)
         return qs
 
+class CNNQNetwork(torch.nn.Module):
+    def __init__(self, num_outputs, num_neurons=32, duelling=True):
+        super().__init__()
+
+        # first cnn layer
+        self.cnn1 = torch.nn.Conv2d(1, 8, kernel_size=5, stride=2, padding=2)
+        # todo: add relus
+        # second cnn layer
+        self.cnn2 = torch.nn.Conv2d(8, 4, kernel_size=5, stride=2, padding=2)
+        # flatten; linear layers
+        # todo: add activation functions
+        self.linear1 = torch.nn.Linear(1600, num_neurons)
+
+        self.duelling = duelling
+        if self.duelling:
+            self.linear2_value = torch.nn.Linear(num_neurons, num_outputs)
+            self.linear2_advantage = torch.nn.Linear(num_neurons, num_outputs)
+        else:
+            self.linear2 = torch.nn.Linear(num_neurons, num_outputs)
+
+    def forward(self, x):        
+
+        h_relu1 = self.cnn1(x).clamp(min=0)
+        h_relu2 = self.cnn2(h_relu1).clamp(min=0)
+        h_relu3 = self.linear1(h_relu2.view(-1, 4 * 20 * 20))
+
+        if self.duelling:
+            values = self.linear2_value(h_relu3)
+            advantages = self.linear2_advantage(h_relu3)
+            qs = values + advantages - torch.max(advantages, dim=-1, keepdim=True)[0]
+        else:
+            qs = self.linear2(h_relu3)
+        return qs
+
+
 class DQNAgent:
-    def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons,
+    def __init__(self, learning_rate, discount_rate, num_inputs,
                  num_outputs, loss_fn, optimiser, random_seed=None, duelling=True,
-                 gradient_clipping_value=None, gradient_clipping_norm=None):
+                 q_network_producer=FCNNQNetwork, gradient_clipping_value=None,
+                 gradient_clipping_norm=None):
         
         if random_seed is not None:
             self.seed(random_seed)
 
         self.discount_rate = discount_rate
-        self.q_network = QNetwork(num_inputs, num_neurons, num_outputs, duelling=duelling)
-        self.target_network = QNetwork(num_inputs, num_neurons, num_outputs, duelling=duelling)
+        self.q_network = q_network_producer(num_outputs=num_outputs, duelling=duelling)
+        self.target_network = q_network_producer(num_outputs=num_outputs, duelling=duelling)
         self.update_target_network()
         self.loss_fn = loss_fn()
         self.optimiser = optimiser(params=self.q_network.parameters(), lr= learning_rate)
@@ -52,6 +88,7 @@ class DQNAgent:
             *zip(*minibatch)
         ]
 
+
         observations = torch.tensor(observations, dtype=torch.float)
         actions = torch.tensor(list(actions), dtype=torch.long)
         rewards = torch.tensor(rewards, dtype=torch.float)
@@ -65,8 +102,6 @@ class DQNAgent:
         batch_size = len(observations)
         next_state_values = torch.zeros(batch_size)
 
-        # value is non-zero only if the current state isn't terminal
-        # ! TODO: complement outside; rename to non_terminal_states
         next_state_values[non_terminal_states] = self.target_network(
             next_observations[non_terminal_states]).max(1)[0].detach()
 
@@ -84,9 +119,9 @@ class DQNAgent:
 
         # clip the gradients if we need to
         if self.gradient_clipping_value is not None:
-            torch.nn.utils.clip_grad_value_(self.q_network.parameters, self.gradient_clipping_threshold)
+            torch.nn.utils.clip_grad_value_(self.q_network.parameters, self.gradient_clipping_value)
         if self.gradient_clipping_norm is not None:
-            torch.nn.utils.clip_grad_norm_(self.q_network.parameters, self.gradient_clipping_threshold)
+            torch.nn.utils.clip_grad_norm_(self.q_network.parameters, self.gradient_clipping_norm)
 
         self.optimiser.step()
 
@@ -97,6 +132,8 @@ class DQNAgent:
         self.target_network.load_state_dict(self.q_network.state_dict())
 
     def act(self, observation):
-        q_values = self.q_network(torch.tensor(observation, dtype=torch.float))
-        # print(f"q values: {q_values}")
-        return q_values.max(0)[1].detach().numpy()
+        q_values = self.q_network(torch.tensor(observation, dtype=torch.float).unsqueeze(0))
+        
+        # ! this is probably broken for CartPole now!
+        # TODO: fix!
+        return q_values.squeeze().max(0)[1].detach().numpy().item()
