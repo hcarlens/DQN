@@ -32,7 +32,7 @@ env = gym.make('Pong-v0')
 loss_fn = loss_functions['mse']
 optimiser = optimisers['adam']
 
-dqn_agent = DQNAgent(learning_rate=0.00025, 
+dqn_agent = DQNAgent(learning_rate=0.001, 
                      discount_rate=0.99,
                      num_inputs=4,
                      num_outputs=3,
@@ -45,7 +45,7 @@ dqn_agent = DQNAgent(learning_rate=0.00025,
 trainer = Trainer(
     env=env, 
     agent=dqn_agent, 
-    memory_buffer=MemoryBuffer(buffer_length=500000), 
+    memory_buffer=MemoryBuffer(buffer_length=50000), 
     start_epsilon=1, 
     timestep_to_start_learning=100000,
     max_num_steps=10000, 

@@ -28,7 +28,6 @@ class CNNQNetwork(torch.nn.Module):
 
         # first cnn layer
         self.cnn1 = torch.nn.Conv2d(1, 8, kernel_size=5, stride=2, padding=2)
-        # todo: add relus
         # second cnn layer
         self.cnn2 = torch.nn.Conv2d(8, 4, kernel_size=5, stride=2, padding=2)
         # flatten; linear layers
@@ -46,7 +45,7 @@ class CNNQNetwork(torch.nn.Module):
 
         h_relu1 = self.cnn1(x).clamp(min=0)
         h_relu2 = self.cnn2(h_relu1).clamp(min=0)
-        h_relu3 = self.linear1(h_relu2.view(-1, 4 * 20 * 20))
+        h_relu3 = self.linear1(h_relu2.view(-1, 4 * 20 * 20)).clamp(min=0)
 
         if self.duelling:
             values = self.linear2_value(h_relu3)
