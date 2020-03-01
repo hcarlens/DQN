@@ -4,7 +4,9 @@ This repository features a PyTorch implementation of DeepMind's DQN, a value-fun
 
 In addition to the base DQN implementation, the [Double Q-Learning](https://arxiv.org/pdf/1509.06461.pdf) and [Duelling Network Architectures](https://arxiv.org/pdf/1511.06581.pdf) have been implemented. The agent can take in any PyTorch optimiser/loss function, and supports multiple types of gradient clipping.
 
+## Structure
 
+Most of the functionality is implemented in the *pytorch_rl* module, across *dqn_agent.py* (the agent) and *agent_trainer.py* (the trainer, which runs episodes and handles interaction between the agent and environment). In addition to this there are a few notebooks in the *nbs* folder, and a *run_training.py* script that can be used to initialise and start training an agent. 
 
 ## Installation
 
