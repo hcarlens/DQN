@@ -8,6 +8,10 @@ In addition to the base DQN implementation, the [Double Q-Learning](https://arxi
 
 Most of the functionality is implemented in the *pytorch_rl* module, across *dqn_agent.py* (the agent) and *agent_trainer.py* (the trainer, which runs episodes and handles interaction between the agent and environment). In addition to this there are a few notebooks in the *nbs* folder, and a *run_training.py* script that can be used to initialise and start training an agent. 
 
+## Requirements
+
+This package works with Python 3.6, 3.7, and 3.8. For PyTorch, it's best to install using instructions on [the PyTorch website](https://pytorch.org/) in order to get the best version for your local hardware.
+
 ## Installation
 
 You can install pytorch_rl by running `pip install .` in the repository folder. This will also install PyTorch, OpenAI Gym, NumPy, and matplotlib. 
