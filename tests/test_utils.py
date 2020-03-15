@@ -10,4 +10,4 @@ def test_running_stats():
 
     assert rs.mean == 2.
     assert pytest.approx(rs.variance) == 7.
-    assert pytest.approx(rs.standard_deviation) == math.sqrt(70)
+    assert pytest.approx(rs.standard_deviation) == math.sqrt(7)
