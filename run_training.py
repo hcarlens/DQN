@@ -13,8 +13,8 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Train a DQN agent on CartPole.')
 parser.add_argument('--seed',  type=int, default=None, help='Random seed. ')
-parser.add_argument('--num_episodes',  type=int, help='Number of episodes to train for. ')
-parser.add_argument('--loss_function',  type=str, default='mse', help='Loss function. ')
+parser.add_argument('--num_episodes',  type=int, default=1000, help='Number of episodes to train for. ')
+parser.add_argument('--loss_fn',  type=str, default='mse', help='Loss function. ')
 parser.add_argument('--optimiser',  type=str, default='adam', help='Loss function. ')
 parser.add_argument('--lr',  type=float, default=0.00025, help='Learning rate. ')
 parser.add_argument('--discount',  type=float, default=0.99, help='Discount rate. ')

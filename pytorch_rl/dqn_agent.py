@@ -58,8 +58,8 @@ class DQNAgent:
         next_observations = torch.tensor(next_observations, dtype=torch.float)
 
         # NOTE: for some reason we can use these as indices when uint8, but not when long
-        non_terminal_states = 1 - torch.tensor(terminal_indicators,
-                                           dtype=torch.uint8)
+        non_terminal_states = ~torch.tensor(terminal_indicators,
+                                           dtype=torch.bool)
 
         # work out perceived value of next states
         batch_size = len(observations)
