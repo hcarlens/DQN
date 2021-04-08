@@ -1,19 +1,16 @@
 import gym
 import matplotlib.pyplot as plt
-import torch
 
 from pytorch_rl.dqn_agent import DQNAgent
 from pytorch_rl.agent_trainer import Trainer
 from pytorch_rl.memory_buffer import MemoryBuffer
-import pytorch_rl.utils as utils
 from pytorch_rl.utils import loss_functions, optimisers
-import random
 import argparse
 
 
 parser = argparse.ArgumentParser(description='Train a DQN agent on CartPole.')
 parser.add_argument('--seed',  type=int, default=None, help='Random seed. ')
-parser.add_argument('--num_episodes',  type=int, default=1000, help='Number of episodes to train for. ')
+parser.add_argument('--num_episodes',  type=int, default=500, help='Number of episodes to train for. ')
 parser.add_argument('--loss_fn',  type=str, default='mse', help='Loss function. ')
 parser.add_argument('--optimiser',  type=str, default='adam', help='Loss function. ')
 parser.add_argument('--lr',  type=float, default=0.00025, help='Learning rate. ')
@@ -24,6 +21,7 @@ parser.add_argument('--buffer_length',  type=int, default=50000, help='Maximum n
 parser.add_argument('--timestep_to_start_learning',  type=int, default=1000, help='Timestep at which we start updating the agent. ')
 parser.add_argument('--target_update_steps',  type=int, default=1000, help='Frequency at which to update the target network. ')
 parser.add_argument('--epsilon_decay_rate',  type=float, default=0.99, help='Rate at which epsilon (random action probability) decays. ')
+parser.add_argument('--cuda',  action='store_true', default=False, help='Pass this flag to train on GPU instead of CPU. ')
 
 
 args = parser.parse_args()
@@ -41,6 +39,7 @@ dqn_agent = DQNAgent(learning_rate=args.lr,
                      random_seed=args.seed,
                      loss_fn=loss_fn,
                      optimiser=optimiser,
+                     cuda=args.cuda
                     )
 
 trainer = Trainer(

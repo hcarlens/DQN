@@ -25,7 +25,7 @@ class QNetwork(torch.nn.Module):
 class DQNAgent:
     def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons,
                  num_outputs, loss_fn, optimiser, random_seed=None, duelling=True,
-                 gradient_clipping_value=None, gradient_clipping_norm=None):
+                 gradient_clipping_value=None, gradient_clipping_norm=None, cuda=False):
         
         if random_seed is not None:
             self.seed(random_seed)
@@ -38,32 +38,35 @@ class DQNAgent:
         self.optimiser = optimiser(params=self.q_network.parameters(), lr= learning_rate)
         self.gradient_clipping_value = gradient_clipping_value
         self.gradient_clipping_norm = gradient_clipping_norm
+        self.device: str = 'cpu'
+        if cuda:
+            self.q_network.cuda()
+            self.target_network.cuda()
+            self.device = 'cuda'
+
 
     def seed(self, random_seed):
         # seed pytorch
         torch.manual_seed(random_seed)
 
     def fit_batch(self, minibatch):
-        """
-        minibatch is a list of (observation, action, reward, next_observation, done) tuples
-        """
+        """ minibatch is a list of (observation, action, reward, next_observation, done) tuples """
         # turn list of tuples into tuples of multiple values
         observations, actions, rewards, next_observations, terminal_indicators = [
             *zip(*minibatch)
         ]
 
-        observations = torch.tensor(observations, dtype=torch.float)
-        actions = torch.tensor(list(actions), dtype=torch.long)
-        rewards = torch.tensor(rewards, dtype=torch.float)
-        next_observations = torch.tensor(next_observations, dtype=torch.float)
+        observations = torch.tensor(observations, dtype=torch.float, device=self.device)
+        actions = torch.tensor(list(actions), dtype=torch.long, device=self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float, device=self.device)
+        next_observations = torch.tensor(next_observations, dtype=torch.float, device=self.device)
 
-        # NOTE: for some reason we can use these as indices when uint8, but not when long
         non_terminal_states = ~torch.tensor(terminal_indicators,
-                                           dtype=torch.bool)
+                                           dtype=torch.bool, device=self.device)
 
         # work out perceived value of next states
         batch_size = len(observations)
-        next_state_values = torch.zeros(batch_size)
+        next_state_values = torch.zeros(batch_size, device=self.device)
 
         # value is non-zero only if the current state isn't terminal
         # ! TODO: complement outside; rename to non_terminal_states
@@ -90,13 +93,13 @@ class DQNAgent:
 
         self.optimiser.step()
 
-        return loss.detach().numpy(), predicted_state_action_values.detach()
+        return loss.detach().cpu().numpy(), predicted_state_action_values.detach()
 
 
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())
 
     def act(self, observation):
-        q_values = self.q_network(torch.tensor(observation, dtype=torch.float))
+        q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
         # print(f"q values: {q_values}")
-        return q_values.max(0)[1].detach().numpy()
+        return q_values.max(0)[1].detach().cpu().numpy()
