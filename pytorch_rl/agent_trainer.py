@@ -4,6 +4,7 @@ import random
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 import os
+import logging
 
 class Trainer:
     """
@@ -44,6 +45,8 @@ class Trainer:
         self.total_steps = 0
         self.episode_lengths = []
         self.loss_values = []
+        self.episode_cuml_rewards = []
+        self.episode_final_infos = []
 
         self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + name))
 
@@ -63,8 +66,11 @@ class Trainer:
     def run(self, num_episodes):
         # run through episodes
         for e in range(num_episodes):
+            logging.debug(f'Starting episode {e}')
+
             observation = self.env.reset()
             current_actions = []
+            current_rewards = []
 
             for t in range(self.max_num_steps):
                 # set the target network weights to be the same as the q-network ones every so often
@@ -81,6 +87,7 @@ class Trainer:
 
                 next_observation, reward, done, info = self.env.step(action)
                 current_actions.append(action)
+                current_rewards.append(reward)
 
                 # add memory to buffer
                 memory = (observation, action, reward, next_observation, done)
@@ -105,6 +112,9 @@ class Trainer:
             self.writer.add_scalar('Episode_timesteps', t, global_step=self.total_steps)
             self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.total_steps)  
             self.episode_lengths.append(t)
+            self.episode_cuml_rewards.append(sum(current_rewards))
+            self.episode_final_infos.append(info)
+
             self.writer.add_scalar('Action_zero_pct',  sum(current_actions) / len(current_actions), global_step=self.total_steps)  
             self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.total_steps)  
             self.writer.add_scalar('running_average_100_trials', np.mean(self.episode_lengths[-100:]), global_step=self.total_steps)
@@ -113,11 +123,14 @@ class Trainer:
             if self.loss_values:
                 loss_min, loss_mean, loss_max = min(self.loss_values[-100:]), np.mean(self.loss_values[-100:]), max(self.loss_values[-100:])
             else:
-                loss_min, loss_mean, loss_max = np.inf, np.inf, np.inf
+                loss_min, loss_mean, loss_max = np.nan, np.nan, np.nan
 
             if e % 10 == 0:
-                print(
-                    f"Ep {e}; {t+1} steps. 100 ep ravg: {np.floor(np.average(self.episode_lengths[-100:]))}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
+                logging.info(
+                    f"Ep {e}; {self.episode_cuml_rewards[-1]} reward. 100 ep ravg: {np.floor(np.average(self.episode_cuml_rewards[-100:]))}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
+                )
+                logging.info(
+                    f"Most recent ep info: {info}"
                 )
 
             # decrease epsilon value
