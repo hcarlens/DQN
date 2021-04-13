@@ -1,5 +1,6 @@
 import torch
 import math
+import numpy as np
 
 loss_functions = {'mse': torch.nn.MSELoss, 'huber': torch.nn.SmoothL1Loss}
 
@@ -62,3 +63,38 @@ class RunningStats():
     @property
     def standard_deviation(self):
         return math.sqrt(self.variance)
+
+class RingBuffer():
+    """ Simple ring buffer of floats, for 'last n running average' stats """
+    def __init__(self, size: int):
+        self.size = size
+        self.array = np.zeros(size)
+        self._n_items = 0
+    
+    def add(self, item: float):
+        self.array[self._n_items % self.size] = item
+        self._n_items += 1
+    
+    def mean(self):
+        """ Get mean of all values """
+        if self._n_items == 0:
+            return np.nan
+        return np.mean(self.array[:self._n_items])
+
+    def min(self):
+        """ Get minimum value """
+        if self._n_items == 0:
+            return np.nan
+        return np.min(self.array[:self._n_items])
+
+    def max(self):
+        """ Get maximum value """
+        if self._n_items == 0:
+            return np.nan
+        return np.max(self.array[:self._n_items])
+
+    def last(self):
+        """ Get most recently added value """
+        if self._n_items == 0:
+            return np.nan
+        return self.array[(self._n_items - 1) % self.size]

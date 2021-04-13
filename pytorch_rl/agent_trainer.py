@@ -8,6 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import time
 import logging
+from pytorch_rl.utils import RingBuffer
 
 class Trainer:
     def __init__(self,
@@ -18,14 +19,14 @@ class Trainer:
                  timestep_to_start_learning=1000,
                  batch_size=32,
                  epsilon_decay_rate=0.999,
-                 learning_rate=0.00025,
                  buffer_length=50000,
                  target_update_steps=1000,
                  max_num_steps=200,
                  end_epsilon=0.01,
                  random_seed=None,
                  train_every_n_steps: int=1,
-                 name='DQN'):
+                 name='DQN',
+                 write_to_tensorboard=True):
         self.env = env
         self.epsilon = start_epsilon
         self.agent = agent
@@ -41,15 +42,17 @@ class Trainer:
         self.train_every_n_steps = train_every_n_steps
 
         self.name = name
-
+        self.write_to_tensorboard = write_to_tensorboard
         
         self.global_step = 0
-        self.episode_lengths = [] # todo: change to ring buffer
-        self.loss_values = [] # todo: change to ring buffer
-        self.episode_cuml_rewards = [] # todo: change to ring buffer
-        self.episode_final_infos = [] # todo: change to ring buffer
+        self.backward_passes = 0
+        self.episode_lengths = RingBuffer(100)
+        self.loss_values = RingBuffer(100)
+        self.episode_cuml_rewards = RingBuffer(100)
+        self.most_recent_episode_final_info = {}
 
-        self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + env.name + '_' + name))
+        if self.write_to_tensorboard:
+            self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + env.name + '_' + name))
 
         if random_seed is not None:
             self.seed(random_seed)
@@ -72,10 +75,13 @@ class Trainer:
         elapsed_time = time.perf_counter() - self.episode_start_time
         elapsed_steps = self.global_step - self.episode_start_timestep
 
-        self.writer.add_scalar('Speed/seconds_per_episode', elapsed_time, self.global_step)
-        self.writer.add_scalar('Speed/steps_per_second', elapsed_steps/elapsed_time, self.global_step)
-
-        self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
+        if self.write_to_tensorboard:
+            self.writer.add_scalar('Speed/seconds_per_episode', elapsed_time, self.global_step)
+            self.writer.add_scalar('Speed/steps_per_second', elapsed_steps/elapsed_time, self.global_step)
+            self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
+            self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.global_step)
+            self.writer.add_scalar('running_average_reward_100_trials', self.episode_cuml_rewards.mean(), global_step=self.global_step)
+            self.writer.add_scalar('running_average_loss_100_steps', self.loss_values.mean(), global_step=self.global_step)
 
     def run(self, num_episodes):
         # run through episodes
@@ -84,8 +90,8 @@ class Trainer:
             self.on_episode_start()
 
             observation = self.env.reset()
-            current_actions = []
-            current_rewards = []
+            current_episode_actions = []
+            current_episode_rewards = []
 
             for t in range(self.max_num_steps):
                 # set the target network weights to be the same as the q-network ones every so often
@@ -101,8 +107,8 @@ class Trainer:
                     action = self.agent.act(observation).item()
 
                 next_observation, reward, done, info = self.env.step(action)
-                current_actions.append(action)
-                current_rewards.append(reward)
+                current_episode_actions.append(action)
+                current_episode_rewards.append(reward)
 
                 # add memory to buffer
                 memory = (observation, action, reward, next_observation, done)
@@ -114,13 +120,16 @@ class Trainer:
                         self.batch_size)
 
                     loss, q_values = self.agent.fit_batch(minibatch)
-                    self.writer.add_scalar('Loss', loss, global_step=self.global_step)
-                    self.writer.add_scalar('Q/median', statistics.median(q_values), global_step=self.global_step)
-                    self.writer.add_scalar('Q/min', min(q_values), global_step=self.global_step)
-                    self.writer.add_scalar('Q/max', max(q_values), global_step=self.global_step)
-                    self.writer.add_scalar('Q/mean', sum(q_values)/len(q_values), global_step=self.global_step)
-                    self.writer.add_histogram('Q_values', q_values, global_step=self.global_step)
-                    self.loss_values.append(loss)
+                    self.backward_passes += 1
+                    if self.write_to_tensorboard:
+                        self.writer.add_scalar('Loss', loss, global_step=self.global_step)
+                        self.writer.add_scalar('Q/median', statistics.median(q_values), global_step=self.global_step)
+                        self.writer.add_scalar('Q/min', min(q_values), global_step=self.global_step)
+                        self.writer.add_scalar('Q/max', max(q_values), global_step=self.global_step)
+                        self.writer.add_scalar('Q/mean', sum(q_values)/len(q_values), global_step=self.global_step)
+                        self.writer.add_histogram('Q_values', q_values, global_step=self.global_step)
+                        self.writer.add_scalar('Backward_passes', self.backward_passes, global_step=self.global_step)
+                    self.loss_values.add(loss)
 
                 observation = next_observation
                 self.global_step += 1
@@ -128,35 +137,28 @@ class Trainer:
                     break
 
             self.on_episode_end()
-            self.writer.add_scalar('Episode_timesteps', t + 1, global_step=self.global_step)
-            self.writer.add_scalar('Episode_reward', sum(current_rewards), global_step=self.global_step)
-            self.episode_lengths.append(t)
-            self.episode_cuml_rewards.append(sum(current_rewards))
-            self.episode_final_infos.append(info)
+            if self.write_to_tensorboard:
+                self.writer.add_scalar('Episode_timesteps', t + 1, global_step=self.global_step)
+                self.writer.add_scalar('Episode_reward', sum(current_episode_rewards), global_step=self.global_step)
+            self.episode_lengths.add(t)
+            self.episode_cuml_rewards.add(sum(current_episode_rewards))
+            self.most_recent_episode_final_info = info
 
             for k, v in info.items():
                 # print all numbers in the final info dict to tensorboard
-                if type(v) in (int, float):
+                if type(v) in (int, float) and self.write_to_tensorboard:
                     self.writer.add_scalar(f'info/{k}', v, global_step=self.global_step)
 
-            # self.writer.add_scalar('Action_zero_pct',  sum(current_actions) / len(current_actions), global_step=self.global_step)
-            # self.writer.add_histogram('Actions',  current_actions, global_step=self.global_step)
-            self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.global_step)
-            self.writer.add_scalar('running_average_reward_100_trials', np.mean(self.episode_cuml_rewards[-100:]), global_step=self.global_step)
-
-
             if self.loss_values:
-                loss_min, loss_mean, loss_max = min(self.loss_values[-100:]), np.mean(self.loss_values[-100:]), max(self.loss_values[-100:])
+                loss_min, loss_mean, loss_max = self.loss_values.min(), self.loss_values.mean(), self.loss_values.max()
             else:
                 loss_min, loss_mean, loss_max = np.nan, np.nan, np.nan
 
             if e % 1 == 0:
                 logging.info(
-                    f"Ep {e}; {self.episode_cuml_rewards[-1]} reward. 100 ep ravg: {np.floor(np.average(self.episode_cuml_rewards[-100:]))}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
+                    f"Ep {e}; {self.episode_cuml_rewards.last()} reward. 100 ep ravg: {np.floor(self.episode_cuml_rewards.mean())}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
                 )
-                logging.info(
-                    f"Most recent ep info: {info}"
-                )
+                logging.info( f"Most recent ep info: {info}")
 
             # decrease epsilon value
             self.epsilon = max(self.epsilon * self.epsilon_decay_rate,
