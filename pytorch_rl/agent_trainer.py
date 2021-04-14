@@ -25,8 +25,10 @@ class Trainer:
                  random_seed=None,
                  train_every_n_steps: int=1,
                  name='DQN',
-                 write_to_tensorboard=True):
+                 write_to_tensorboard=True,
+                 hparams={}):
         self.env = env
+        self.start_epsilon = start_epsilon
         self.epsilon = start_epsilon
         self.agent = agent
         self.memory_buffer = memory_buffer
@@ -45,13 +47,17 @@ class Trainer:
         
         self.global_step = 0
         self.global_episode = 0
+        self.target_net_updates = 0
         self.backward_passes = 0
         self.episode_lengths = RingBuffer(100)
+        self.recent_actions = RingBuffer(1000)
         self.loss_values = RingBuffer(100)
         self.episode_cuml_rewards = RingBuffer(100)
         self.most_recent_episode_final_info = {}
 
-        self.hparams = {}
+        self.max_episode_reward = None
+
+        self.hparams = hparams
 
         if self.write_to_tensorboard:
             if hasattr(env, 'name'):
@@ -62,18 +68,21 @@ class Trainer:
                 env_name = 'UNKNOWN_ENV'
             self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + env_name + '_' + name))
 
+        self.random_seed = random_seed
+
         if random_seed is not None:
             self.seed(random_seed)
 
         logging.info('Trainer initialised.')
 
     def seed(self, random_seed):
-            # seed all the things
-            self.agent.seed(random_seed)
-            self.env.seed(random_seed)
-            self.env.action_space.seed(random_seed)
-            np.random.seed(random_seed)
-            random.seed(random_seed)
+        """ Seed all the things (see https://harald.co/2019/07/30/reproducibility-issues-using-openai-gym/) """
+        self.agent.seed(random_seed)
+        self.env.seed(random_seed)
+        self.env.action_space.seed(random_seed)
+        np.random.seed(random_seed)
+        random.seed(random_seed)
+        logging.info(f'Random seed set: {self.random_seed}')
 
     def on_episode_start(self):
         self.episode_start_time = time.perf_counter()
@@ -84,6 +93,10 @@ class Trainer:
         elapsed_steps = self.global_step - self.episode_start_timestep
         self.global_episode += 1
 
+        most_recent_reward = self.episode_cuml_rewards.last()
+        if (self.max_episode_reward is None or most_recent_reward > self.max_episode_reward) and most_recent_reward is not np.nan:
+            self.max_episode_reward = most_recent_reward
+
         if self.write_to_tensorboard:
             self.writer.add_scalar('Speed/seconds_per_episode', elapsed_time, self.global_step)
             self.writer.add_scalar('Speed/steps_per_second', elapsed_steps/elapsed_time, self.global_step)
@@ -93,11 +106,25 @@ class Trainer:
             self.writer.add_scalar('Progress/steps_per_episode', elapsed_steps, global_step=self.global_step)
             self.writer.add_scalar('Progress/Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
             self.writer.add_scalar('Progress/Epsilon',  self.epsilon, global_step=self.global_step)
+            self.writer.add_scalar('Reward/Max',  self.max_episode_reward, global_step=self.global_step)
+            self.writer.add_scalar('Reward/Last', most_recent_reward, global_step=self.global_step)
+            self.writer.add_histogram('Recent_actions', self.recent_actions.values, global_step=self.global_step)
 
     def on_train_end(self):
-          if hasattr(self.writer, 'add_hparams'):
+          if self.write_to_tensorboard and hasattr(self.writer, 'add_hparams'):
             # save the hyperparams if we have the correct version of tensorboard
-            self.writer.add_hparams(hparam_dict=self.hparams, metric_dict={}) # todo: populate metrics
+            self.hparams['seed'] = self.random_seed
+            self.hparams['eps_decay'] = self.epsilon_decay_rate
+            self.hparams['bs'] = self.batch_size
+            self.hparams['timestep_to_start_learning'] = self.timestep_to_start_learning
+            self.hparams['eps_start'] = self.start_epsilon
+            self.hparams['eps_end'] = self.end_epsilon
+            self.hparams['target_update_steps'] = self.target_update_steps
+            self.hparams['train_every_n_steps'] = self.train_every_n_steps
+            self.writer.add_hparams(hparam_dict=self.hparams, metric_dict={'max_episode_reward': self.max_episode_reward, 'last_100_mean_reward': self.episode_cuml_rewards.mean(),
+                                                                           'last_100_min_reward': self.episode_cuml_rewards.min(), 'last_100_max_reward': self.episode_cuml_rewards.max(),})
+            logging.info('Wrote hyperparams.')
+            # todo: add test reward
 
     def run(self, num_episodes):
 
@@ -116,7 +143,10 @@ class Trainer:
                 # set the target network weights to be the same as the q-network ones every so often
                 if self.global_step % self.target_update_steps == 0:
                     self.agent.update_target_network()
+                    self.target_net_updates += 1
                     logging.debug('Target network updated. ')
+                    if self.write_to_tensorboard:
+                        self.writer.add_scalar('Progress/target_net_updates', self.target_net_updates, global_step=self.global_step)
 
                 # with probability epsilon, choose a random action
                 # otherwise use Q-network to pick action
@@ -128,6 +158,7 @@ class Trainer:
                 next_observation, reward, done, info = self.env.step(action)
                 current_episode_actions.append(action)
                 current_episode_rewards.append(reward)
+                self.recent_actions.add(action)
 
                 # add memory to buffer
                 memory = (observation, action, reward, next_observation, done)
@@ -146,6 +177,8 @@ class Trainer:
                     self.backward_passes += 1
                     if self.write_to_tensorboard:
                         self.writer.add_scalar('Loss', loss, global_step=self.global_step)
+                        self.writer.add_scalar('Progress/target_net_updates', self.target_net_updates,
+                                               global_step=self.global_step)
                         if 'q_values' in batch_info:
                             q_values = batch_info['q_values']
                             self.writer.add_scalar('Q/median', statistics.median(q_values), global_step=self.global_step)
@@ -153,7 +186,11 @@ class Trainer:
                             self.writer.add_scalar('Q/max', max(q_values), global_step=self.global_step)
                             self.writer.add_scalar('Q/mean', sum(q_values)/len(q_values), global_step=self.global_step)
                             self.writer.add_histogram('Q_values', q_values, global_step=self.global_step)
-                        self.writer.add_scalar('Backward_passes', self.backward_passes, global_step=self.global_step)
+                            self.writer.add_scalar('Progress/backward_passes', self.backward_passes, global_step=self.global_step)
+                        if 'state_values' in batch_info:
+                            pass # todo: do something with his
+                        if 'action_advantages' in batch_info:
+                            pass # todo: do something with his
                     self.loss_values.add(loss)
 
                 observation = next_observation
@@ -161,12 +198,11 @@ class Trainer:
                 if done or t == self.max_num_steps - 1:
                     break
 
+            self.episode_cuml_rewards.add(sum(current_episode_rewards))
             self.on_episode_end()
             if self.write_to_tensorboard:
                 self.writer.add_scalar('Episode_timesteps', t + 1, global_step=self.global_step)
-                self.writer.add_scalar('Episode_reward', sum(current_episode_rewards), global_step=self.global_step)
             self.episode_lengths.add(t)
-            self.episode_cuml_rewards.add(sum(current_episode_rewards))
             self.most_recent_episode_final_info = info
 
             for k, v in info.items():
@@ -188,3 +224,5 @@ class Trainer:
             # decrease epsilon value
             self.epsilon = max(self.epsilon * self.epsilon_decay_rate,
                                self.end_epsilon)
+
+        self.on_train_end()

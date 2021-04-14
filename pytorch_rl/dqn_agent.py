@@ -14,9 +14,9 @@ class QNetwork(torch.nn.Module):
     def forward(self, x):
         main_net_output = self.main_net(x)
         if self.duelling:
-            values = self.linear_value(main_net_output)
-            advantages = self.linear_advantage(main_net_output)
-            qs = values + advantages - torch.max(advantages, dim=-1, keepdim=True)[0]
+            self.values = self.linear_value(main_net_output) # todo: check this is correct. Shouldn't value be the same for all actions?
+            self.advantages = self.linear_advantage(main_net_output)
+            qs = self.values + self.advantages - torch.max(self.advantages, dim=-1, keepdim=True)[0]
         else:
             qs = self.linear(main_net_output)
         return qs
@@ -95,8 +95,13 @@ class DQNAgent:
             torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), self.gradient_clipping_threshold)
 
         self.optimiser.step()
+        info_dict = {'loss': loss.detach().cpu().numpy(), 'q_values': predicted_state_action_values.detach()}
+        if hasattr(self.q_network, 'values'):
+            info_dict['state_values'] = self.q_network.values
+        if hasattr(self.q_network, 'advantages'):
+            info_dict['action_advantages'] = self.q_network.advantages
 
-        return {'loss': loss.detach().cpu().numpy(), 'q_values': predicted_state_action_values.detach()}
+        return info_dict
 
 
     def update_target_network(self):

@@ -146,3 +146,10 @@ class RingBuffer():
         if self._n_items == 0:
             return np.nan
         return self.array[(self._n_items - 1) % self.size]
+
+    @property
+    def values(self):
+        """ Return a copy of the underlying array. """
+        if self._n_items == 0:
+            return np.array([])
+        return self.array.copy()
