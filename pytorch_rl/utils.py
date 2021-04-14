@@ -1,6 +1,8 @@
 import torch
+import torch.nn as nn
 import math
 import numpy as np
+from typing import Tuple
 
 loss_functions = {'mse': torch.nn.MSELoss, 'huber': torch.nn.SmoothL1Loss}
 
@@ -10,6 +12,52 @@ optimisers = {
     'sgd': torch.optim.SGD
 }
 
+def load_activation_function(activation_function_name: str):
+    if activation_function_name == 'tanh':
+        return nn.Tanh()
+    elif activation_function_name == 'relu':
+        return nn.ReLU()
+    elif activation_function_name == 'sigmoid':
+        return nn.Sigmoid()
+    else:
+        raise ValueError('activation_function must be one of "tanh", "relu", or "sigmoid". ')
+
+def create_sequential_model(num_inputs: int, layers_spec: Tuple[int, ...], num_outputs: int, dropout_rate: float,
+                            activation_function: str, batch_norm: bool = False, final_activation: bool = False):
+    """
+    Create a PyTorch model from a spec.
+    Returning a sequential, since we can't just have a list of layers.
+    See https://discuss.pytorch.org/t/runtimeerror-expected-object-of-backend-cpu-but-got-backend-cuda-for-argument-4-mat1/54745/2
+    and https://discuss.pytorch.org/t/append-for-nn-sequential-or-directly-converting-nn-modulelist-to-nn-sequential/7104
+    """
+
+    dropout = nn.Dropout(p=dropout_rate)
+
+    activation = load_activation_function(activation_function)
+
+    # create input layer
+    input_layer = nn.Linear(num_inputs, layers_spec[0])
+
+    # create dynamic list of middle layers, followed by activation function and dropout
+    if batch_norm:  # disable dropout when we're using batch norm
+        layers = [
+            (nn.Linear(layers_spec[i], layers_spec[i + 1]), nn.BatchNorm1d(num_features=layers_spec[i + 1]), activation)
+            for i in range(len(layers_spec) - 1)]
+    else:
+        layers = [(nn.Linear(layers_spec[i], layers_spec[i + 1]), activation, dropout) for i in
+                  range(len(layers_spec) - 1)]
+    layers = [item for layer in layers for item in layer]
+
+    # create output layer
+    output_layer = nn.Linear(layers_spec[-1], num_outputs)
+
+    # stitch all the layers together into a sequential module
+    modules = [input_layer, activation] + layers + [output_layer]
+
+    if final_activation:
+        modules += [activation]
+
+    return nn.Sequential(*modules)
 
 class RunningStats():
     """

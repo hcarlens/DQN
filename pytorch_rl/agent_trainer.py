@@ -1,7 +1,6 @@
 import statistics
 
 import numpy as np
-import torch
 import random
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
@@ -45,19 +44,28 @@ class Trainer:
         self.write_to_tensorboard = write_to_tensorboard
         
         self.global_step = 0
+        self.global_episode = 0
         self.backward_passes = 0
         self.episode_lengths = RingBuffer(100)
         self.loss_values = RingBuffer(100)
         self.episode_cuml_rewards = RingBuffer(100)
         self.most_recent_episode_final_info = {}
 
+        self.hparams = {}
+
         if self.write_to_tensorboard:
-            self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + env.name + '_' + name))
+            if hasattr(env, 'name'):
+                env_name = env.name # for custom-made envs
+            elif hasattr(env, 'unwrapped') and hasattr(env.unwrapped, 'spec') and hasattr(env.unwrapped.spec, 'id'):
+                env_name = env.unwrapped.spec.id # for gym envs
+            else:
+                env_name = 'UNKNOWN_ENV'
+            self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'), datetime.now().strftime('%H_%M_%S_') + env_name + '_' + name))
 
         if random_seed is not None:
             self.seed(random_seed)
 
-        print('Trainer initialised.')
+        logging.info('Trainer initialised.')
 
     def seed(self, random_seed):
             # seed all the things
@@ -74,16 +82,27 @@ class Trainer:
     def on_episode_end(self):
         elapsed_time = time.perf_counter() - self.episode_start_time
         elapsed_steps = self.global_step - self.episode_start_timestep
+        self.global_episode += 1
 
         if self.write_to_tensorboard:
             self.writer.add_scalar('Speed/seconds_per_episode', elapsed_time, self.global_step)
             self.writer.add_scalar('Speed/steps_per_second', elapsed_steps/elapsed_time, self.global_step)
-            self.writer.add_scalar('Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
-            self.writer.add_scalar('Epsilon',  self.epsilon, global_step=self.global_step)
             self.writer.add_scalar('running_average_reward_100_trials', self.episode_cuml_rewards.mean(), global_step=self.global_step)
             self.writer.add_scalar('running_average_loss_100_steps', self.loss_values.mean(), global_step=self.global_step)
+            self.writer.add_scalar('Progress/Episodes', self.global_episode, global_step=self.global_step)
+            self.writer.add_scalar('Progress/steps_per_episode', elapsed_steps, global_step=self.global_step)
+            self.writer.add_scalar('Progress/Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
+            self.writer.add_scalar('Progress/Epsilon',  self.epsilon, global_step=self.global_step)
+
+    def on_train_end(self):
+          if hasattr(self.writer, 'add_hparams'):
+            # save the hyperparams if we have the correct version of tensorboard
+            self.writer.add_hparams(hparam_dict=self.hparams, metric_dict={}) # todo: populate metrics
 
     def run(self, num_episodes):
+
+        info = {}
+
         # run through episodes
         for e in range(num_episodes):
             logging.debug(f'Starting episode {e}')
@@ -97,7 +116,7 @@ class Trainer:
                 # set the target network weights to be the same as the q-network ones every so often
                 if self.global_step % self.target_update_steps == 0:
                     self.agent.update_target_network()
-                    print('Target network updated. ')
+                    logging.debug('Target network updated. ')
 
                 # with probability epsilon, choose a random action
                 # otherwise use Q-network to pick action
@@ -118,16 +137,22 @@ class Trainer:
                     # sample a minibatch of experiences and update q-network
                     minibatch = self.memory_buffer.sample_minibatch(
                         self.batch_size)
+                    logging.debug('Sampled batch')
 
-                    loss, q_values = self.agent.fit_batch(minibatch)
+                    batch_info = self.agent.fit_batch(minibatch)
+                    loss = batch_info['loss']
+                    logging.debug('Fitted batch')
+
                     self.backward_passes += 1
                     if self.write_to_tensorboard:
                         self.writer.add_scalar('Loss', loss, global_step=self.global_step)
-                        self.writer.add_scalar('Q/median', statistics.median(q_values), global_step=self.global_step)
-                        self.writer.add_scalar('Q/min', min(q_values), global_step=self.global_step)
-                        self.writer.add_scalar('Q/max', max(q_values), global_step=self.global_step)
-                        self.writer.add_scalar('Q/mean', sum(q_values)/len(q_values), global_step=self.global_step)
-                        self.writer.add_histogram('Q_values', q_values, global_step=self.global_step)
+                        if 'q_values' in batch_info:
+                            q_values = batch_info['q_values']
+                            self.writer.add_scalar('Q/median', statistics.median(q_values), global_step=self.global_step)
+                            self.writer.add_scalar('Q/min', min(q_values), global_step=self.global_step)
+                            self.writer.add_scalar('Q/max', max(q_values), global_step=self.global_step)
+                            self.writer.add_scalar('Q/mean', sum(q_values)/len(q_values), global_step=self.global_step)
+                            self.writer.add_histogram('Q_values', q_values, global_step=self.global_step)
                         self.writer.add_scalar('Backward_passes', self.backward_passes, global_step=self.global_step)
                     self.loss_values.add(loss)
 

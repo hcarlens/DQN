@@ -3,7 +3,7 @@ from pytorch_rl.agent_trainer import Trainer
 from pytorch_rl.sanity_envs import (SanityEnvV0, SanityEnvV1, SanityEnvV2,
                                                   SanityEnvV3, SanityEnvV4)
 from pytorch_rl.memory_buffer import MemoryBuffer
-from pytorch_rl.utils import loss_functions, optimisers
+from pytorch_rl.utils import loss_functions, optimisers, create_sequential_model
 
 RANDOM_SEED = 0
 
@@ -12,11 +12,12 @@ def test_sanity_env_v0():
     optimiser = optimisers['adam']
     env = SanityEnvV0()
 
+    dqn_net = create_sequential_model(num_inputs=env.observation_space.shape[0], layers_spec=(8,), num_outputs=8,
+                                  dropout_rate=0, activation_function='relu', final_activation=True)
     dqn_agent = DQNAgent(learning_rate=5e-3,
                         discount_rate=0.99,
-                        num_inputs=env.observation_space.shape[0],
-                        num_neurons_0=8,
-                        num_neurons_1=8,
+                        main_net=dqn_net,
+                        final_layer_neurons=8,
                         num_outputs=env.action_space.n,
                         random_seed=RANDOM_SEED,
                         loss_fn=loss_fn,
@@ -49,11 +50,12 @@ def test_sanity_env_v1():
     optimiser = optimisers['adam']
     env = SanityEnvV1()
 
+    dqn_net = create_sequential_model(num_inputs=env.observation_space.shape[0], layers_spec=(8,), num_outputs=8,
+                                      dropout_rate=0, activation_function='relu', final_activation=True)
     dqn_agent = DQNAgent(learning_rate=5e-3,
                         discount_rate=0.99,
-                        num_inputs=env.observation_space.shape[0],
-                        num_neurons_0=8,
-                        num_neurons_1=8,
+                        main_net=dqn_net,
+                        final_layer_neurons=8,
                         num_outputs=env.action_space.n,
                         random_seed=RANDOM_SEED,
                         loss_fn=loss_fn,
@@ -86,11 +88,13 @@ def test_sanity_env_v2():
     optimiser = optimisers['adam']
     env = SanityEnvV2()
 
+    dqn_net = create_sequential_model(num_inputs=env.observation_space.shape[0], layers_spec=(8,), num_outputs=8,
+                                      dropout_rate=0, activation_function='relu', final_activation=True)
+
     dqn_agent = DQNAgent(learning_rate=5e-3,
                         discount_rate=0.99,
-                        num_inputs=env.observation_space.shape[0],
-                        num_neurons_0=8,
-                        num_neurons_1=8,
+                        main_net=dqn_net,
+                        final_layer_neurons=8,
                         num_outputs=env.action_space.n,
                         random_seed=RANDOM_SEED,
                         loss_fn=loss_fn,
@@ -123,11 +127,13 @@ def test_sanity_env_v3():
     optimiser = optimisers['adam']
     env = SanityEnvV3()
 
+    dqn_net = create_sequential_model(num_inputs=env.observation_space.shape[0], layers_spec=(8,), num_outputs=8,
+                                      dropout_rate=0, activation_function='relu', final_activation=True)
+
     dqn_agent = DQNAgent(learning_rate=5e-3,
                         discount_rate=0.99,
-                        num_inputs=env.observation_space.shape[0],
-                        num_neurons_0=8,
-                        num_neurons_1=8,
+                        main_net=dqn_net,
+                        final_layer_neurons=8,
                         num_outputs=env.action_space.n,
                         random_seed=RANDOM_SEED,
                         loss_fn=loss_fn,
@@ -159,12 +165,13 @@ def test_sanity_env_v4():
     loss_fn = loss_functions['mse']
     optimiser = optimisers['adam']
     env = SanityEnvV4()
+    dqn_net = create_sequential_model(num_inputs=env.observation_space.shape[0], layers_spec=(8,), num_outputs=8,
+                                      dropout_rate=0, activation_function='relu', final_activation=True)
 
     dqn_agent = DQNAgent(learning_rate=5e-3,
                         discount_rate=0.99,
-                        num_inputs=env.observation_space.shape[0],
-                        num_neurons_0=8,
-                        num_neurons_1=8,
+                        main_net=dqn_net,
+                        final_layer_neurons=8,
                         num_outputs=env.action_space.n,
                         random_seed=RANDOM_SEED,
                         loss_fn=loss_fn,

@@ -1,40 +1,38 @@
 import torch
-import torch.nn as nn
 
 class QNetwork(torch.nn.Module):
-    def __init__(self, num_inputs, num_neurons_0, num_neurons_1, num_outputs, duelling=True):
+    def __init__(self, main_net: torch.nn.Module, final_layer_neurons: int, num_outputs: int, duelling: bool=True):
         super().__init__()
-        self.linear0 = torch.nn.Linear(num_inputs, num_neurons_0)
-        self.linear1 = torch.nn.Linear(num_neurons_0, num_neurons_1)
+        self.main_net = main_net
         self.duelling = duelling
         if self.duelling:
-            self.linear2_value = torch.nn.Linear(num_neurons_1, num_outputs)
-            self.linear2_advantage = torch.nn.Linear(num_neurons_1, num_outputs)
+            self.linear_value = torch.nn.Linear(final_layer_neurons, num_outputs)
+            self.linear_advantage = torch.nn.Linear(final_layer_neurons, num_outputs)
         else:
-            self.linear2 = torch.nn.Linear(num_neurons_1, num_outputs)
+            self.linear = torch.nn.Linear(final_layer_neurons, num_outputs)
 
     def forward(self, x):
-        h0_relu = self.linear0(x).clamp(min=0)
-        h1_relu = self.linear1(h0_relu).clamp(min=0)
+        main_net_output = self.main_net(x)
         if self.duelling:
-            values = self.linear2_value(h1_relu)
-            advantages = self.linear2_advantage(h1_relu)
+            values = self.linear_value(main_net_output)
+            advantages = self.linear_advantage(main_net_output)
             qs = values + advantages - torch.max(advantages, dim=-1, keepdim=True)[0]
         else:
-            qs = self.linear2(h1_relu)
+            qs = self.linear(main_net_output)
         return qs
 
 class DQNAgent:
-    def __init__(self, learning_rate, discount_rate, num_inputs, num_neurons_0, num_neurons_1,
-                 num_outputs, loss_fn, optimiser, random_seed=None, duelling=True,
-                 gradient_clipping_value=None, gradient_clipping_threshold=None, gradient_clipping_norm=None, cuda=False):
+    def __init__(self, learning_rate: float, discount_rate: float, main_net: torch.nn.Module, final_layer_neurons: int,
+                 num_outputs: int, loss_fn, optimiser, random_seed: int = None, duelling: bool = True,
+                 gradient_clipping_value=None, gradient_clipping_threshold=None, gradient_clipping_norm=None,
+                 cuda: bool = False):
         
         if random_seed is not None:
             self.seed(random_seed)
 
         self.discount_rate = discount_rate
-        self.q_network = QNetwork(num_inputs, num_neurons_0, num_neurons_1, num_outputs, duelling=duelling)
-        self.target_network = QNetwork(num_inputs, num_neurons_0, num_neurons_1, num_outputs, duelling=duelling)
+        self.q_network = QNetwork(main_net, final_layer_neurons, num_outputs, duelling=duelling)
+        self.target_network = QNetwork(main_net, final_layer_neurons, num_outputs, duelling=duelling)
         self.update_target_network()
         self.loss_fn = loss_fn()
         self.optimiser = optimiser(params=self.q_network.parameters(), lr= learning_rate)
@@ -98,7 +96,7 @@ class DQNAgent:
 
         self.optimiser.step()
 
-        return loss.detach().cpu().numpy(), predicted_state_action_values.detach()
+        return {'loss': loss.detach().cpu().numpy(), 'q_values': predicted_state_action_values.detach()}
 
 
     def update_target_network(self):
