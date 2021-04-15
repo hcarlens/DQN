@@ -200,8 +200,6 @@ class Trainer:
 
             self.episode_cuml_rewards.add(sum(current_episode_rewards))
             self.on_episode_end()
-            if self.write_to_tensorboard:
-                self.writer.add_scalar('Episode_timesteps', t + 1, global_step=self.global_step)
             self.episode_lengths.add(t)
             self.most_recent_episode_final_info = info
 

@@ -1,4 +1,7 @@
 import torch
+import logging
+
+logging.getLogger().setLevel(logging.INFO)
 
 class QNetwork(torch.nn.Module):
     def __init__(self, main_net: torch.nn.Module, final_layer_neurons: int, num_outputs: int, duelling: bool=True):
@@ -6,15 +9,15 @@ class QNetwork(torch.nn.Module):
         self.main_net = main_net
         self.duelling = duelling
         if self.duelling:
-            self.linear_value = torch.nn.Linear(final_layer_neurons, num_outputs)
-            self.linear_advantage = torch.nn.Linear(final_layer_neurons, num_outputs)
+            self.linear_value = torch.nn.Linear(final_layer_neurons, 1) # single value per state
+            self.linear_advantage = torch.nn.Linear(final_layer_neurons, num_outputs) # single advantage per state-action
         else:
             self.linear = torch.nn.Linear(final_layer_neurons, num_outputs)
 
     def forward(self, x):
         main_net_output = self.main_net(x)
         if self.duelling:
-            self.values = self.linear_value(main_net_output) # todo: check this is correct. Shouldn't value be the same for all actions?
+            self.values = self.linear_value(main_net_output)
             self.advantages = self.linear_advantage(main_net_output)
             qs = self.values + self.advantages - torch.max(self.advantages, dim=-1, keepdim=True)[0]
         else:

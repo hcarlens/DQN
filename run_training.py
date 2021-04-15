@@ -24,7 +24,7 @@ parser.add_argument('--layers_spec',  type=str, default='16', help='Spec for the
 parser.add_argument('--final_layer_neurons',  type=int, default=16, help='Number of neurons in the final layer. ')
 parser.add_argument('--buffer_length',  type=int, default=50000, help='Maximum number of memories stored in the memory buffer before overwriting. ')
 parser.add_argument('--timestep_to_start_learning',  type=int, default=1000, help='Timestep at which we start updating the agent. ')
-parser.add_argument('--target_update_steps',  type=int, default=1000, help='Frequency at which to update the target network. ')
+parser.add_argument('--target_update_steps',  type=int, default=300, help='Frequency at which to update the target network. ')
 parser.add_argument('--epsilon_decay_rate',  type=float, default=0.99, help='Rate at which epsilon (random action probability) decays. ')
 parser.add_argument('--cuda',  action='store_true', default=False, help='Pass this flag to train on GPU instead of CPU. ')
 parser.add_argument('--gymenv',  type=str, default='CartPole-v0', help='Choose an OpenAI Gym env to run the agent on. ')
