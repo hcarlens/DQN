@@ -25,9 +25,10 @@ parser.add_argument('--final_layer_neurons',  type=int, default=16, help='Number
 parser.add_argument('--buffer_length',  type=int, default=50000, help='Maximum number of memories stored in the memory buffer before overwriting. ')
 parser.add_argument('--timestep_to_start_learning',  type=int, default=1000, help='Timestep at which we start updating the agent. ')
 parser.add_argument('--target_update_steps',  type=int, default=300, help='Frequency at which to update the target network. ')
+parser.add_argument('--test_every_n_steps',  type=int, default=5000, help='Frequency at which to run a test episode. ')
 parser.add_argument('--epsilon_decay_rate',  type=float, default=0.99, help='Rate at which epsilon (random action probability) decays. ')
 parser.add_argument('--cuda',  action='store_true', default=False, help='Pass this flag to train on GPU instead of CPU. ')
-parser.add_argument('--gymenv',  type=str, default='CartPole-v0', help='Choose an OpenAI Gym env to run the agent on. ')
+parser.add_argument('--gymenv',  type=str, default='CartPole-v1', help='Choose an OpenAI Gym env to run the agent on. ')
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -72,6 +73,7 @@ trainer = Trainer(
     target_update_steps=args.target_update_steps,
     epsilon_decay_rate=args.epsilon_decay_rate,
     random_seed=args.seed,
+    test_every_n_steps=args.test_every_n_steps,
     hparams={'lr': args.lr, 'dr': args.discount, 'layers': args.layers_spec, 'final_layer': args.final_layer_neurons,
              'cuda': args.cuda, 'optimiser': args.optimiser, 'loss_fn': args.loss_fn, 'buffer_length': args.buffer_length,
              'duelling': duelling}

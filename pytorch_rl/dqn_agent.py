@@ -57,14 +57,17 @@ class DQNAgent:
     def fit_batch(self, minibatch):
         """ minibatch is a list of (observation, action, reward, next_observation, done) tuples """
         # turn list of tuples into tuples of multiple values
+        logging.debug('Starting to fit batch')
         observations, actions, rewards, next_observations, terminal_indicators = [
             *zip(*minibatch)
         ]
 
+        logging.debug('Turning memories into tensors')
         observations = torch.tensor(observations, dtype=torch.float, device=self.device)
         actions = torch.tensor(list(actions), dtype=torch.long, device=self.device)
         rewards = torch.tensor(rewards, dtype=torch.float, device=self.device)
         next_observations = torch.tensor(next_observations, dtype=torch.float, device=self.device)
+        logging.debug('Turned memories into tensors')
 
         non_terminal_states = ~torch.tensor(terminal_indicators,
                                            dtype=torch.bool, device=self.device)
@@ -74,7 +77,6 @@ class DQNAgent:
         next_state_values = torch.zeros(batch_size, device=self.device)
 
         # value is non-zero only if the current state isn't terminal
-        # ! TODO: complement outside; rename to non_terminal_states
         if non_terminal_states.sum() > 0:
             next_state_values[non_terminal_states] = self.target_network(
                 next_observations[non_terminal_states]).max(1)[0].detach()
@@ -87,15 +89,19 @@ class DQNAgent:
         loss = self.loss_fn(expected_state_action_values,
                      predicted_state_action_values.squeeze())
 
+        logging.debug('Starting backward pass.')
         # optimise the model
         self.optimiser.zero_grad()
         loss.backward()
+        logging.debug('Finished backward pass.')
 
+        logging.debug('Clipping gradients.')
         # clip the gradients if we need to
         if self.gradient_clipping_value is not None:
             torch.nn.utils.clip_grad_value_(self.q_network.parameters(), self.gradient_clipping_threshold)
         if self.gradient_clipping_norm is not None:
             torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), self.gradient_clipping_threshold)
+        logging.debug('Finished clipping gradients.')
 
         self.optimiser.step()
         info_dict = {'loss': loss.detach().cpu().numpy(), 'q_values': predicted_state_action_values.detach()}
@@ -104,6 +110,7 @@ class DQNAgent:
         if hasattr(self.q_network, 'advantages'):
             info_dict['action_advantages'] = self.q_network.advantages
 
+        logging.debug('Finished fitting batch')
         return info_dict
 
 

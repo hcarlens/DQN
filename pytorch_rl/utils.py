@@ -113,14 +113,27 @@ class RunningStats():
         return math.sqrt(self.variance)
 
 class RingBuffer():
-    """ Simple ring buffer of floats, for 'last n running average' stats """
+    """
+    Simple ring buffer of floats, for 'last n running average' stats.
+    Also tracks some all-time stats.
+    Should probably merge this with the runningstats class at some point.
+    """
+
     def __init__(self, size: int):
         self.size = size
         self.array = np.zeros(size)
         self._n_items = 0
-    
+        self._all_time_max = np.nan
+        self._all_time_min = np.nan
+
     def add(self, item: float):
+        # add to array in the right place
         self.array[self._n_items % self.size] = item
+        # replace all-time max/min if necessary
+        if self._all_time_max is np.nan or item > self._all_time_max:
+            self._all_time_max = item
+        if self._all_time_min is np.nan or item < self._all_time_min:
+            self._all_time_min = item
         self._n_items += 1
     
     def mean(self):
@@ -153,3 +166,11 @@ class RingBuffer():
         if self._n_items == 0:
             return np.array([])
         return self.array.copy()
+
+    def all_time_max(self):
+        """ Get all-time maximum value """
+        return self._all_time_max
+
+    def all_time_min(self):
+        """ Get all-time minimum value """
+        return self._all_time_min

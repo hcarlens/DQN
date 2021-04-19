@@ -1,4 +1,10 @@
-""" Various toy environments for testing our agents. Based on https://andyljones.com/posts/rl-debugging.html """
+"""
+Various toy environments for testing our agents.
+Based on https://andyljones.com/posts/rl-debugging.html
+Todo:
+ - Add stochastic reward envs (E.g. multi-armed bandits)
+ - Add delayed reward envs
+"""
 
 import numpy as np
 import gym
