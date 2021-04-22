@@ -183,6 +183,9 @@ class Trainer:
                 # print all numbers in the final info dict to tensorboard
                 if type(v) in (int, float) and self.write_to_tensorboard:
                     self.writer.add_scalar(f'Test_info/{k}', v, global_step=self.global_step)
+                if type(v) in (tuple, np.ndarray) and self.write_to_tensorboard:
+                    for i, v_i in enumerate(v):
+                        self.writer.add_scalar(f'Test_info/{k}_{i}', v_i, global_step=self.global_step)
 
         self.last_test_timestep = self.global_step
         self.num_test_episodes += 1
@@ -282,8 +285,11 @@ class Trainer:
             for k, v in info.items():
                 logging.debug('Printing info')
                 # print all numbers in the final info dict to tensorboard
-                if type(v) in (int, float) and self.write_to_tensorboard:
+                if type(v) in (int, float, np.float32, np.float64) and self.write_to_tensorboard:
                     self.writer.add_scalar(f'info/{k}', v, global_step=self.global_step)
+                if type(v) in (tuple, np.ndarray) and self.write_to_tensorboard:
+                    for i, v_i in enumerate(v):
+                        self.writer.add_scalar(f'info/{k}_{i}', v_i, global_step=self.global_step)
                 logging.debug('Printed info')
 
             if self.loss_values:
