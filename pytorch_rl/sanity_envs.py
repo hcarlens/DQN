@@ -150,7 +150,6 @@ class SanityEnvV4(gym.Env):
     """
 
     def __init__(self):
-        """ Initialise a Toy Selection Environment. """
         super().__init__()
 
         self.state = np.zeros(1)
@@ -161,15 +160,63 @@ class SanityEnvV4(gym.Env):
     def step(self, action: int):
         """ Implement action, update environment, and return state/reward/terminated flag """
 
-        reward = 1 if action == self.state else 0
+        reward = 1 if action == self.state else -1
         done = True
 
         self.num_steps += 1
 
-        return self.state, reward, done, {}
+        return self.state.copy(), reward, done, {}
 
     def reset(self):
         """ Reset the environment. """
         self.state = np.random.randint(low=0, high=2, size=(1,))
         self.num_steps = 0
-        return self.state
+        return self.state.copy()
+
+class SanityEnvV5(gym.Env):
+    """
+    Two actions, constantly incrementing observation from 0 to 1, 10 timesteps, +1 reward if action 1 is chosen at timestep 5.
+    -1 reward for picking action 1 at any other point.
+    """
+
+    def __init__(self, max_num_steps: int = 1, correct_timestep = 0, terminate_on_penalty = False):
+        super().__init__()
+
+        self.state = np.zeros(1, dtype=np.float64)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.action_space = spaces.Discrete(2)
+        self.name = 'SanityV5'
+        self.max_num_steps = max_num_steps
+        self.correct_timestep = correct_timestep
+        self.terminate_on_penalty = terminate_on_penalty
+
+
+    def step(self, action: int):
+        """ Implement action, update environment, and return state/reward/terminated flag """
+
+        reward = 0
+        if action == 1 and self.num_steps == self.correct_timestep:
+            # reward if action is taken at the right time
+            reward = 1
+        elif action == 1:
+            # penalty if action is taken at the wrong time
+            reward = -1
+
+        done = True if (self.num_steps >= self.max_num_steps
+                        or self.terminate_on_penalty and reward == -1
+                        ) else False
+
+        self.state += 0.1
+        self.num_steps += 1
+
+        return self.state.copy(), reward, done, {}
+
+
+    def reset(self):
+        """ Reset the environment. """
+        self.state = np.zeros(1, dtype=np.float64)
+        self.num_steps = 0
+        return self.state.copy()
+
+
+#todo: add stochastic env (e.g. multi-armed bandit)
