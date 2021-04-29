@@ -219,4 +219,65 @@ class SanityEnvV5(gym.Env):
         return self.state.copy()
 
 
+class SanityEnvV6(gym.Env):
+    """
+    Parametric env, with action masking!
+    Four actions, constantly incrementing observation from 0 to 0.3, 3 timesteps, +1 reward if action 1 is chosen at timestep 2.
+    -1 reward for picking action 1 at any other point.
+    Error raised if invalid action (per action mask) is chosen.
+    """
+
+    parametric = True
+
+    def __init__(self, max_num_steps: int = 3, correct_timestep = 2, terminate_on_penalty = False):
+        super().__init__()
+
+        self.state = np.zeros(1, dtype=np.float64)
+        self.observation_space = spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.action_space = spaces.Discrete(4)
+        self.name = 'SanityV6'
+        self.max_num_steps = max_num_steps
+        self.correct_timestep = correct_timestep
+        self.terminate_on_penalty = terminate_on_penalty
+        self.action_mask = np.ones(4)
+
+    def randomise_action_mask(self):
+        """ Set a random action mask for this timestep"""
+        self.action_mask = np.random.randint(0, 2, 4)
+        if self.action_mask.max() == 0:
+            # if we don't have any valid actions, randomly pick one
+            self.action_mask[np.random.randint(self.action_space.n)] = 1
+
+    def step(self, action: int):
+        """ Implement action, update environment, and return state/reward/terminated flag """
+
+        if self.action_mask[action] == 0:
+            raise ValueError(f'Selected invalid action {action} when action mask is {self.action_mask}. ')
+
+        reward = 0
+        if action == 1 and self.num_steps == self.correct_timestep:
+            # reward if action is taken at the right time
+            reward = 1
+        elif action == 1:
+            # penalty if action is taken at the wrong time
+            reward = -1
+
+        done = True if (self.num_steps >= self.max_num_steps
+                        or self.terminate_on_penalty and reward == -1
+                        ) else False
+
+        self.state += 0.1
+        self.num_steps += 1
+
+        self.randomise_action_mask()
+        return {'observation': self.state.copy(), 'action_mask': self.action_mask.copy()}, reward, done, {}
+
+
+    def reset(self):
+        """ Reset the environment. """
+        self.state = np.zeros(1, dtype=np.float64)
+        self.num_steps = 0
+        self.randomise_action_mask()
+        return {'observation': self.state.copy(), 'action_mask': self.action_mask.copy()}
+
 #todo: add stochastic env (e.g. multi-armed bandit)

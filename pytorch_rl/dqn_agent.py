@@ -1,5 +1,6 @@
 import torch
 import logging
+import numpy as np
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -58,7 +59,7 @@ class DQNAgent:
         """ minibatch is a list of (observation, action, reward, next_observation, done) tuples """
         # turn list of tuples into tuples of multiple values
         logging.debug('Starting to fit batch')
-        observations, actions, rewards, next_observations, terminal_indicators = [
+        observations, actions, rewards, next_observations, next_action_masks, terminal_indicators = [
             *zip(*minibatch)
         ]
 
@@ -76,6 +77,7 @@ class DQNAgent:
         batch_size = len(observations)
         next_state_values = torch.zeros(batch_size, device=self.device)
 
+        # todo: incorporate action mask here
         # value is non-zero only if the current state isn't terminal
         if non_terminal_states.sum() > 0:
             next_state_values[non_terminal_states] = self.target_network(
@@ -117,7 +119,21 @@ class DQNAgent:
     def update_target_network(self):
         self.target_network.load_state_dict(self.q_network.state_dict())
 
-    def act(self, observation):
-        q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
-        # print(f"q values: {q_values}")
-        return q_values.max(0)[1].detach().cpu().numpy()
+    def act(self, observation: np.array, action_mask: np.array = None):
+        # todo: implement action masking
+        if action_mask is not None:
+            # we need to implement action masking
+            mask = torch.tensor(action_mask, dtype=torch.bool, device=self.device)
+            q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
+
+            # find the index of the max q value in the masked array of q_values
+            max_masked_action_index = q_values[mask].max(0)[1]
+
+            # find the equivalent index in the unmasked array
+            max_unmasked_action_index = torch.arange(len(q_values))[mask][max_masked_action_index]
+
+            return max_unmasked_action_index
+        else:
+            # straightforward max over q-values
+            q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
+            return q_values.max(0)[1].detach().cpu().numpy()

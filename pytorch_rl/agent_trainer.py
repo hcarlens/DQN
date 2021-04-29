@@ -1,6 +1,6 @@
 import statistics
 
-from typing import Optional
+from typing import Optional, Tuple, Dict, Union
 
 import numpy as np
 import random
@@ -78,6 +78,13 @@ class Trainer:
         if self.write_to_tensorboard:
             self.initialise_tensorboard_writer()
 
+        # check whether we're dealing with a parametric env (if so, we'll need action masking)
+        if hasattr(self.env, 'parametric') and self.env.parametric is True:
+            self.parametric_env = True
+            self.actions = np.arange(self.env.action_space.n)
+        else:
+            self.parametric_env = False
+
         logging.info('Trainer initialised.')
 
     def initialise_tensorboard_writer(self):
@@ -147,6 +154,16 @@ class Trainer:
                                                                            'last_100_min_reward': self.episode_cuml_rewards.min(), 'last_100_max_reward': self.episode_cuml_rewards.max(),})
             logging.info('Wrote hyperparams.')
 
+    def process_env_observation(self, env_observation: Union[np.array, Dict]) -> Tuple[np.array, Optional[np.array]]:
+        """ Normalises the environment observation across parametric and non-parametric environments """
+        if self.parametric_env:
+            observation = env_observation['observation']
+            action_mask = env_observation['action_mask']
+        else:
+            observation = env_observation
+            action_mask = None
+        return observation, action_mask
+
     def run_test_episode(self):
         """
         Run a test episode with the policy as it is.
@@ -156,14 +173,16 @@ class Trainer:
         logging.debug('Running a test episode')
         test_ep_start_time = time.perf_counter()
 
-        observation = self.env.reset()
+        env_observation = self.env.reset()
+        observation, action_mask = self.process_env_observation(env_observation)
         current_episode_actions = []
         current_episode_rewards = []
 
         for t in range(self.max_num_steps):
-            action = self.agent.act(observation).item()
+            action = self.agent.act(observation, action_mask).item()
 
-            observation, reward, done, info = self.env.step(action)
+            env_observation, reward, done, info = self.env.step(action)
+            observation, action_mask = self.process_env_observation(env_observation)
             current_episode_actions.append(action)
             current_episode_rewards.append(reward)
 
@@ -201,8 +220,10 @@ class Trainer:
             logging.debug(f'Starting episode {e}')
             self.on_episode_start()
 
-            observation = self.env.reset()
+            env_observation = self.env.reset()
             current_episode_cuml_reward = 0
+
+            observation, action_mask = self.process_env_observation(env_observation)
 
             for t in range(self.max_num_steps):
                 logging.debug('New step. ')
@@ -218,18 +239,25 @@ class Trainer:
                 # with probability epsilon, choose a random action
                 # otherwise use Q-network to pick action
                 if random.uniform(0, 1) < self.epsilon:
-                    action = self.env.action_space.sample()
+                    # todo: add action mask overlay to sampling
+                    if self.parametric_env:
+                        action = np.random.choice(self.actions[action_mask == 1]) # ! this only works for discrete action spaces!
+                    else:
+                        action = self.env.action_space.sample()
                     logging.debug('Action sampled. ')
                 else:
-                    action = self.agent.act(observation).item()
+                    action = self.agent.act(observation, action_mask).item()
                     logging.debug('Action chosen. ')
 
-                next_observation, reward, done, info = self.env.step(action)
+                next_env_observation, reward, done, info = self.env.step(action)
+                next_observation, next_action_mask = self.process_env_observation(next_env_observation)
+
                 current_episode_cuml_reward += reward
+
                 self.recent_actions.add(action)
 
                 # add memory to buffer
-                memory = (observation, action, reward, next_observation, done)
+                memory = (observation, action, reward, next_observation, next_action_mask, done)
                 self.memory_buffer.add_memory(memory)
 
                 if self.global_step > self.timestep_to_start_learning and self.global_step % self.train_every_n_steps == 0:
@@ -273,6 +301,7 @@ class Trainer:
                     self.loss_values.add(loss)
 
                 observation = next_observation
+                action_mask = next_action_mask
                 self.global_step += 1
                 if done or t == self.max_num_steps - 1:
                     break
