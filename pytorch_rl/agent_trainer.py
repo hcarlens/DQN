@@ -21,7 +21,6 @@ class Trainer:
                  batch_size: int = 32,
                  epsilon_decay_rate= 0.999,
                  buffer_length: int = 50000,
-                 target_update_steps: int = 1000,
                  max_num_steps: int = 10000,
                  end_epsilon: float = 0.01,
                  random_seed: Optional[int] = None,
@@ -43,7 +42,6 @@ class Trainer:
         self.epsilon_decay_rate = epsilon_decay_rate
         self.batch_size = batch_size
         self.buffer_length = buffer_length
-        self.target_update_steps = target_update_steps
         self.timestep_to_start_learning = timestep_to_start_learning
         self.train_every_n_steps = train_every_n_steps
         self.test_every_n_steps = test_every_n_steps
@@ -55,7 +53,6 @@ class Trainer:
         self.test_steps = 0
         self.global_episode = 0
         self.num_test_episodes = 0
-        self.target_net_updates = 0
         self.backward_passes = 0
         self.last_test_timestep = 0
         self.episode_lengths = RingBuffer(100)
@@ -148,7 +145,7 @@ class Trainer:
             self.hparams['timestep_to_start_learning'] = self.timestep_to_start_learning
             self.hparams['eps_start'] = self.start_epsilon
             self.hparams['eps_end'] = self.end_epsilon
-            self.hparams['target_update_steps'] = self.target_update_steps
+            self.hparams['target_update_steps'] = self.agent.target_update_steps
             self.hparams['train_every_n_steps'] = self.train_every_n_steps
             self.writer.add_hparams(hparam_dict=self.hparams, metric_dict={'max_episode_reward': self.max_episode_reward, 'last_100_mean_reward': self.episode_cuml_rewards.mean(),
                                                                            'last_100_min_reward': self.episode_cuml_rewards.min(), 'last_100_max_reward': self.episode_cuml_rewards.max(),})
@@ -227,14 +224,6 @@ class Trainer:
 
             for t in range(self.max_num_steps):
                 logging.debug('New step. ')
-                # set the target network weights to be the same as the q-network ones every so often
-                if self.global_step % self.target_update_steps == 0:
-                    logging.debug('Updating target network')
-                    self.agent.update_target_network()
-                    self.target_net_updates += 1
-                    logging.debug('Target network updated. ')
-                    if self.write_to_tensorboard:
-                        self.writer.add_scalar('Progress/target_net_updates', self.target_net_updates, global_step=self.global_step)
 
                 # with probability epsilon, choose a random action
                 # otherwise use Q-network to pick action
@@ -278,7 +267,7 @@ class Trainer:
                     if self.write_to_tensorboard and self.backward_passes % self.log_every_n_steps == 0:
                         logging.debug('Printing to tensorboard...')
                         self.writer.add_scalar('Loss/Last', loss, global_step=self.global_step)
-                        self.writer.add_scalar('Progress/target_net_updates', self.target_net_updates,
+                        self.writer.add_scalar('Progress/target_net_updates', self.agent.num_target_net_updates,
                                                global_step=self.global_step)
                         if 'q_values' in batch_info:
                             q_values = batch_info['q_values']

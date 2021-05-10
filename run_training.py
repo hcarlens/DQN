@@ -62,8 +62,9 @@ dqn_agent = DQNAgent(learning_rate=args.lr,
                      loss_fn=loss_fn,
                      optimiser=optimiser,
                      cuda=args.cuda,
-                     duelling=duelling
-                    )
+                     duelling=duelling,
+                    target_update_steps = args.target_update_steps,
+)
 
 trainer = Trainer(
     env=env, 
@@ -72,7 +73,6 @@ trainer = Trainer(
     start_epsilon=1, 
     timestep_to_start_learning=args.timestep_to_start_learning,
     batch_size=args.batch_size,
-    target_update_steps=args.target_update_steps,
     epsilon_decay_rate=args.epsilon_decay_rate,
     random_seed=args.seed,
     train_every_n_steps=args.train_every_n_steps,

@@ -37,8 +37,9 @@ def test_sanity_env_v0():
                         optimiser=optimiser,
                         cuda=False,
                         gradient_clipping_value=True,
-                        gradient_clipping_threshold=1
-                        )
+                        gradient_clipping_threshold=1,
+                        target_update_steps = 10,
+    )
 
     trainer = Trainer(
         env=env,
@@ -47,7 +48,6 @@ def test_sanity_env_v0():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
         epsilon_decay_rate=0.5,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
@@ -76,8 +76,9 @@ def test_sanity_env_v1():
                         optimiser=optimiser,
                         cuda=False,
                         gradient_clipping_value=True,
-                        gradient_clipping_threshold=1
-                        )
+                        gradient_clipping_threshold=1,
+                        target_update_steps=10,
+                         )
 
     trainer = Trainer(
         env=env,
@@ -86,7 +87,6 @@ def test_sanity_env_v1():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
         epsilon_decay_rate=0.5,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
@@ -116,8 +116,9 @@ def test_sanity_env_v2():
                         optimiser=optimiser,
                         cuda=False,
                         gradient_clipping_value=True,
-                        gradient_clipping_threshold=1
-                        )
+                        gradient_clipping_threshold=1,
+                        target_update_steps=10,
+                         )
 
     trainer = Trainer(
         env=env,
@@ -126,7 +127,6 @@ def test_sanity_env_v2():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
         epsilon_decay_rate=0.5,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
@@ -155,7 +155,8 @@ def test_sanity_env_v3():
                         loss_fn=loss_fn,
                         optimiser=optimiser,
                         cuda=False,
-                        )
+                        target_update_steps=10,
+                         )
 
     trainer = Trainer(
         env=env,
@@ -164,7 +165,6 @@ def test_sanity_env_v3():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
         epsilon_decay_rate=0.5,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
@@ -192,7 +192,8 @@ def test_sanity_env_v4():
                         loss_fn=loss_fn,
                         optimiser=optimiser,
                         cuda=False,
-                        )
+                        target_update_steps=10,
+                         )
 
     trainer = Trainer(
         env=env,
@@ -201,7 +202,6 @@ def test_sanity_env_v4():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
         epsilon_decay_rate=0.5,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
@@ -229,7 +229,8 @@ def test_sanity_env_v5():
                         loss_fn=loss_fn,
                         optimiser=optimiser,
                         cuda=False,
-                        )
+                        target_update_steps=10,
+                         )
 
     trainer = Trainer(
         env=env,
@@ -238,8 +239,7 @@ def test_sanity_env_v5():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
-        epsilon_decay_rate=0.5,
+        epsilon_decay_rate=0.99,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
         train_every_n_steps=1,
@@ -266,7 +266,8 @@ def test_sanity_env_v6():
                         loss_fn=loss_fn,
                         optimiser=optimiser,
                         cuda=False,
-                        )
+                        target_update_steps=10,
+                         )
 
     trainer = Trainer(
         env=env,
@@ -275,13 +276,12 @@ def test_sanity_env_v6():
         start_epsilon=1,
         timestep_to_start_learning=20,
         batch_size=16,
-        target_update_steps=10,
-        epsilon_decay_rate=0.5,
+        epsilon_decay_rate=0.99,
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
-        train_every_n_steps=1,
+        train_every_n_steps=2,
         write_to_tensorboard=False
     )
-    trainer.run(num_episodes=800)
+    trainer.run(num_episodes=900)
 
     assert trainer.loss_values.max() < 1e-5, f'Loss is too high on {env.name}'
