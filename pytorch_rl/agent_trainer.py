@@ -16,13 +16,10 @@ class Trainer:
                  env,
                  agent,
                  memory_buffer,
-                 start_epsilon: float,
                  timestep_to_start_learning: int = 1000,
                  batch_size: int = 32,
-                 epsilon_decay_rate= 0.999,
                  buffer_length: int = 50000,
                  max_num_steps: int = 10000,
-                 end_epsilon: float = 0.01,
                  random_seed: Optional[int] = None,
                  train_every_n_steps: int=1,
                  agent_name: str = 'DQN',
@@ -31,15 +28,11 @@ class Trainer:
                  log_every_n_steps: int = 20, # note: this is actually every n training steps, not env steps
                  hparams: dict = {}):
         self.env = env
-        self.start_epsilon = start_epsilon
-        self.epsilon = start_epsilon
         self.agent = agent
         self.memory_buffer = memory_buffer
         self.agent_name = agent_name
 
         self.max_num_steps = max_num_steps
-        self.end_epsilon = end_epsilon
-        self.epsilon_decay_rate = epsilon_decay_rate
         self.batch_size = batch_size
         self.buffer_length = buffer_length
         self.timestep_to_start_learning = timestep_to_start_learning
@@ -125,7 +118,7 @@ class Trainer:
             self.writer.add_scalar('Progress/Test_episodes', self.num_test_episodes, global_step=self.global_step)
             self.writer.add_scalar('Progress/Steps_per_episode', elapsed_steps, global_step=self.global_step)
             self.writer.add_scalar('Progress/Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
-            self.writer.add_scalar('Progress/Epsilon',  self.epsilon, global_step=self.global_step)
+            self.writer.add_scalar('Progress/Epsilon',  self.agent.epsilon, global_step=self.global_step)
             self.writer.add_scalar('Reward/Max',  self.max_episode_reward, global_step=self.global_step)
             self.writer.add_scalar('Reward/Last', most_recent_reward, global_step=self.global_step)
             self.writer.add_scalar('Reward/100_ep_avg', self.episode_cuml_rewards.mean(), global_step=self.global_step)
@@ -140,11 +133,11 @@ class Trainer:
         if self.write_to_tensorboard and hasattr(self.writer, 'add_hparams'):
             # save the hyperparams if we have the correct version of tensorboard
             self.hparams['seed'] = self.random_seed
-            self.hparams['eps_decay'] = self.epsilon_decay_rate
+            self.hparams['start_epsilon'] = self.agent.start_epsilon
+            self.hparams['end_epsilon'] = self.agent.end_epsilon
+            self.hparams['epsilon_decay_steps'] = self.agent.epsilon_decay_steps
             self.hparams['bs'] = self.batch_size
             self.hparams['timestep_to_start_learning'] = self.timestep_to_start_learning
-            self.hparams['eps_start'] = self.start_epsilon
-            self.hparams['eps_end'] = self.end_epsilon
             self.hparams['target_update_steps'] = self.agent.target_update_steps
             self.hparams['train_every_n_steps'] = self.train_every_n_steps
             self.writer.add_hparams(hparam_dict=self.hparams, metric_dict={'max_episode_reward': self.max_episode_reward, 'last_100_mean_reward': self.episode_cuml_rewards.mean(),
@@ -225,18 +218,8 @@ class Trainer:
             for t in range(self.max_num_steps):
                 logging.debug('New step. ')
 
-                # with probability epsilon, choose a random action
-                # otherwise use Q-network to pick action
-                if random.uniform(0, 1) < self.epsilon:
-                    # todo: add action mask overlay to sampling
-                    if self.parametric_env:
-                        action = np.random.choice(self.actions[action_mask == 1]) # ! this only works for discrete action spaces!
-                    else:
-                        action = self.env.action_space.sample()
-                    logging.debug('Action sampled. ')
-                else:
-                    action = self.agent.act(observation, action_mask).item()
-                    logging.debug('Action chosen. ')
+                # randomness is in the agent
+                action = self.agent.act(observation, action_mask).item()
 
                 next_env_observation, reward, done, info = self.env.step(action)
                 next_observation, next_action_mask = self.process_env_observation(next_env_observation)
@@ -317,12 +300,8 @@ class Trainer:
 
             if e % 1 == 0:
                 logging.info(
-                    f"Ep {e}; {self.episode_cuml_rewards.last()} reward. 100 ep ravg: {np.floor(self.episode_cuml_rewards.mean())}. Eps {self.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
+                    f"Ep {e}; {self.episode_cuml_rewards.last()} reward. 100 ep ravg: {np.floor(self.episode_cuml_rewards.mean())}. Eps {self.agent.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
                 )
                 logging.info( f"Most recent ep info: {info}")
-
-            # decrease epsilon value
-            self.epsilon = max(self.epsilon * self.epsilon_decay_rate,
-                               self.end_epsilon)
 
         self.on_train_end()

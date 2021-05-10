@@ -1,4 +1,5 @@
 import torch
+import random
 import logging
 import numpy as np
 from pytorch_rl.base_agent import BaseAgent
@@ -30,7 +31,8 @@ class DQNAgent(BaseAgent):
     def __init__(self, learning_rate: float, discount_rate: float, main_net: torch.nn.Module, final_layer_neurons: int,
                  target_update_steps: int, num_outputs: int, loss_fn, optimiser, random_seed: int = None, duelling: bool = True,
                  gradient_clipping_value=None, gradient_clipping_threshold=None, gradient_clipping_norm=None,
-                 cuda: bool = False, train_mode: bool = False):
+                 cuda: bool = False, train_mode: bool = False, start_epsilon: float = 1, end_epsilon: float = 0.01,
+                 epsilon_decay_steps: int = 10000, eval_mode: bool = False):
 
         if random_seed is not None:
             self.seed(random_seed)
@@ -48,6 +50,17 @@ class DQNAgent(BaseAgent):
         self.target_update_steps: int = target_update_steps  # how often to update the target net (every n backward passes)
         self.num_backward_passes: int = 0  # counter to know when to update target net
         self.num_target_net_updates: int = 0  # counter to know when to update target net
+        self.num_training_steps: int = 0  # counter to know how many training steps we've taken
+
+        self.start_epsilon = start_epsilon
+        self.end_epsilon = end_epsilon
+        self.epsilon_decay_steps = epsilon_decay_steps
+
+        self.epsilon = start_epsilon
+
+        self.eval_mode = eval_mode # if true, use fully greedy policy (no epsilon-randomness)
+
+        self.possible_actions = np.arange(num_outputs) # used for action sampling and masking
 
         self.update_target_network()
 
@@ -58,10 +71,10 @@ class DQNAgent(BaseAgent):
         else:
             self.device: str = 'cpu'
 
-
     def seed(self, random_seed):
-        # seed pytorch
+        """ Seed relevant libraries """
         torch.manual_seed(random_seed)
+        random.seed(random_seed)
 
     def fit_batch(self, minibatch):
         """ minibatch is a list of (observation, action, reward, next_observation, done) tuples """
@@ -85,7 +98,6 @@ class DQNAgent(BaseAgent):
         batch_size = len(observations)
         next_state_values = torch.zeros(batch_size, device=self.device)
 
-        # todo: incorporate action mask here
         # value is non-zero only if the current state isn't terminal
         if non_terminal_states.sum() > 0:
             next_state_values[non_terminal_states] = self.target_network(
@@ -133,24 +145,46 @@ class DQNAgent(BaseAgent):
 
 
     def update_target_network(self):
+        """ Bring the target network params in line with the main network params """
         self.target_network.load_state_dict(self.q_network.state_dict())
         self.num_target_net_updates += 1
 
+    def update_epsilon(self):
+        """ Bring the target network params in line with the main network params """
+
+        epsilon_progress = self.num_training_steps / self.epsilon_decay_steps
+        if epsilon_progress > 1:
+            self.epsilon = self.end_epsilon
+        else: #  linear interpolation
+            self.epsilon = self.start_epsilon * (1 - epsilon_progress) + self.end_epsilon * (epsilon_progress)
 
     def act(self, observation: np.array, action_mask: np.array = None):
-        if action_mask is not None:
-            # we need to implement action masking
-            mask = torch.tensor(action_mask, dtype=torch.bool, device=self.device)
-            q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
+        """ Act, using greedy policy (eval_mode = True) or epsilon-greedy (eval_mode = False) """
+        if not self.eval_mode:
+            self.update_epsilon()
+            self.num_training_steps += 1
 
-            # find the index of the max q value in the masked array of q_values
-            max_masked_action_index = q_values[mask].max(0)[1]
+        if self.eval_mode or random.uniform(0, 1) > self.epsilon:  # deterministic/greedy actions
+            logging.debug('Taking greedy action. ')
+            if action_mask is not None:
+                # we need to implement action masking
+                mask = torch.tensor(action_mask, dtype=torch.bool, device=self.device)
+                q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
 
-            # find the equivalent index in the unmasked array
-            max_unmasked_action_index = torch.arange(len(q_values))[mask][max_masked_action_index]
+                # find the index of the max q value in the masked array of q_values
+                max_masked_action_index = q_values[mask].max(0)[1]
 
-            return max_unmasked_action_index
-        else:
-            # straightforward max over q-values
-            q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
-            return q_values.max(0)[1].detach().cpu().numpy()
+                # find the equivalent index in the unmasked array
+                max_unmasked_action_index = torch.arange(len(q_values))[mask][max_masked_action_index]
+
+                return max_unmasked_action_index
+            else:
+                # straightforward max over q-values
+                q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
+                return q_values.max(0)[1].detach().cpu().numpy()
+        else:  # random actions
+            logging.debug('Taking random action. ')
+            if action_mask is not None:
+                return np.random.choice(self.possible_actions[action_mask == 1])
+            else:
+                return np.random.choice(self.possible_actions)
