@@ -10,11 +10,12 @@ import os
 import time
 import logging
 from pytorch_rl.utils import RingBuffer
+from pytorch_rl.base_agent import BaseAgent
 
 class Trainer:
     def __init__(self,
                  env,
-                 agent,
+                 agent: BaseAgent,
                  memory_buffer,
                  timestep_to_start_learning: int = 1000,
                  batch_size: int = 32,
@@ -28,7 +29,7 @@ class Trainer:
                  log_every_n_steps: int = 20, # note: this is actually every n training steps, not env steps
                  hparams: dict = {}):
         self.env = env
-        self.agent = agent
+        self.agent: BaseAgent = agent
         self.memory_buffer = memory_buffer
         self.agent_name = agent_name
 
@@ -99,6 +100,7 @@ class Trainer:
     def on_episode_start(self):
         self.episode_start_time = time.perf_counter()
         self.episode_start_timestep = self.global_step
+        self.agent.set_train_mode() # ensure we're in train mode so we're exploring!
 
     def on_episode_end(self):
         """ Write to tensorboard and perform some admin after each episode """
@@ -164,6 +166,7 @@ class Trainer:
         test_ep_start_time = time.perf_counter()
 
         env_observation = self.env.reset()
+        self.agent.set_eval_mode() # ensure we're using the optimal policy and not exploring!
         observation, action_mask = self.process_env_observation(env_observation)
         current_episode_actions = []
         current_episode_rewards = []
