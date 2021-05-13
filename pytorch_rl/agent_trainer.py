@@ -23,7 +23,6 @@ class Trainer:
                  max_num_steps: int = 10000,
                  random_seed: Optional[int] = None,
                  train_every_n_steps: int=1,
-                 agent_name: str = 'DQN',
                  write_to_tensorboard: bool = True,
                  test_every_n_steps: int = 1000,
                  log_every_n_steps: int = 20, # note: this is actually every n training steps, not env steps
@@ -31,7 +30,6 @@ class Trainer:
         self.env = env
         self.agent: BaseAgent = agent
         self.memory_buffer = memory_buffer
-        self.agent_name = agent_name
 
         self.max_num_steps = max_num_steps
         self.batch_size = batch_size
@@ -78,6 +76,18 @@ class Trainer:
 
         logging.info('Trainer initialised.')
 
+    def reward_to_go(self, rewards):
+        """
+        Takes in a list of rewards and returns an array of 'rewards to go' (remaining return)
+        from https://spinningup.openai.com/en/latest/spinningup/rl_intro3.html
+        # todo: rewrite using a cumulative sum in numpy
+        """
+        n = len(rewards)
+        rtgs = np.zeros_like(rewards)
+        for i in reversed(range(n)):
+            rtgs[i] = rewards[i] + (rtgs[i+1] if i+1 < n else 0)
+        return rtgs
+
     def initialise_tensorboard_writer(self):
         if hasattr(self.env, 'name'):
             env_name = self.env.name  # for custom-made envs
@@ -86,7 +96,7 @@ class Trainer:
         else:
             env_name = 'UNKNOWN_ENV'
         self.writer = SummaryWriter(log_dir=os.path.join('runs', datetime.now().strftime('%Y_%m_%d'),
-                                                         datetime.now().strftime('%H_%M_%S_') + env_name + '_' + self.agent_name))
+                                                         datetime.now().strftime('%H_%M_%S_') + env_name + '_' + self.agent.name))
 
     def seed(self, random_seed):
         """ Seed all the things (see https://harald.co/2019/07/30/reproducibility-issues-using-openai-gym/) """
@@ -120,12 +130,13 @@ class Trainer:
             self.writer.add_scalar('Progress/Test_episodes', self.num_test_episodes, global_step=self.global_step)
             self.writer.add_scalar('Progress/Steps_per_episode', elapsed_steps, global_step=self.global_step)
             self.writer.add_scalar('Progress/Buffer_length', self.memory_buffer.current_length, global_step=self.global_step)
-            self.writer.add_scalar('Progress/Epsilon',  self.agent.epsilon, global_step=self.global_step)
             self.writer.add_scalar('Reward/Max',  self.max_episode_reward, global_step=self.global_step)
             self.writer.add_scalar('Reward/Last', most_recent_reward, global_step=self.global_step)
             self.writer.add_scalar('Reward/100_ep_avg', self.episode_cuml_rewards.mean(), global_step=self.global_step)
             self.writer.add_histogram('Recent_actions', self.recent_actions.values, global_step=self.global_step)
             self.writer.add_scalar('Loss/100_step_average', self.loss_values.mean(), global_step=self.global_step)
+            if hasattr(self.agent, 'epsilon'):
+                self.writer.add_scalar('Progress/Epsilon',  self.agent.epsilon, global_step=self.global_step)
 
         if self.global_step > self.last_test_timestep + self.test_every_n_steps:
             self.run_test_episode()
@@ -135,12 +146,12 @@ class Trainer:
         if self.write_to_tensorboard and hasattr(self.writer, 'add_hparams'):
             # save the hyperparams if we have the correct version of tensorboard
             self.hparams['seed'] = self.random_seed
-            self.hparams['start_epsilon'] = self.agent.start_epsilon
-            self.hparams['end_epsilon'] = self.agent.end_epsilon
-            self.hparams['epsilon_decay_steps'] = self.agent.epsilon_decay_steps
+            # self.hparams['start_epsilon'] = self.agent.start_epsilon
+            # self.hparams['end_epsilon'] = self.agent.end_epsilon
+            # self.hparams['epsilon_decay_steps'] = self.agent.epsilon_decay_steps
             self.hparams['bs'] = self.batch_size
             self.hparams['timestep_to_start_learning'] = self.timestep_to_start_learning
-            self.hparams['target_update_steps'] = self.agent.target_update_steps
+            # self.hparams['target_update_steps'] = self.agent.target_update_steps
             self.hparams['train_every_n_steps'] = self.train_every_n_steps
             self.writer.add_hparams(hparam_dict=self.hparams, metric_dict={'max_episode_reward': self.max_episode_reward, 'last_100_mean_reward': self.episode_cuml_rewards.mean(),
                                                                            'last_100_min_reward': self.episode_cuml_rewards.min(), 'last_100_max_reward': self.episode_cuml_rewards.max(),})
@@ -172,7 +183,7 @@ class Trainer:
         current_episode_rewards = []
 
         for t in range(self.max_num_steps):
-            action = self.agent.act(observation, action_mask).item()
+            action = self.agent.act(observation, action_mask)
 
             env_observation, reward, done, info = self.env.step(action)
             observation, action_mask = self.process_env_observation(env_observation)
@@ -221,8 +232,8 @@ class Trainer:
             for t in range(self.max_num_steps):
                 logging.debug('New step. ')
 
-                # randomness is in the agent
-                action = self.agent.act(observation, action_mask).item()
+                # randomness is in the agent now!
+                action = self.agent.act(observation, action_mask)
 
                 next_env_observation, reward, done, info = self.env.step(action)
                 next_observation, next_action_mask = self.process_env_observation(next_env_observation)
@@ -253,7 +264,16 @@ class Trainer:
                     if self.write_to_tensorboard and self.backward_passes % self.log_every_n_steps == 0:
                         logging.debug('Printing to tensorboard...')
                         self.writer.add_scalar('Loss/Last', loss, global_step=self.global_step)
-                        self.writer.add_scalar('Progress/target_net_updates', self.agent.num_target_net_updates,
+                        if hasattr(self.agent, 'num_target_updates'):
+                            self.writer.add_scalar('Progress/target_net_updates', self.agent.num_target_net_updates,
+                                                   global_step=self.global_step)
+                        self.writer.add_scalar('Progress/backward_passes', self.backward_passes,
+                                               global_step=self.global_step)
+                        self.writer.add_scalar('Speed/Backward_pass_duration_mean', self.backward_pass_durations.mean(),
+                                               global_step=self.global_step)
+                        self.writer.add_scalar('Speed/Backward_pass_duration_min', self.backward_pass_durations.min(),
+                                               global_step=self.global_step)
+                        self.writer.add_scalar('Speed/Backward_pass_duration_max', self.backward_pass_durations.max(),
                                                global_step=self.global_step)
                         if 'q_values' in batch_info:
                             q_values = batch_info['q_values']
@@ -262,16 +282,15 @@ class Trainer:
                             self.writer.add_scalar('Q/max', max(q_values), global_step=self.global_step)
                             self.writer.add_scalar('Q/mean', sum(q_values)/len(q_values), global_step=self.global_step)
                             self.writer.add_histogram('Q_values', q_values, global_step=self.global_step)
-                            self.writer.add_scalar('Progress/backward_passes', self.backward_passes, global_step=self.global_step)
-                            self.writer.add_scalar('Speed/Backward_pass_duration_mean', self.backward_pass_durations.mean(), global_step=self.global_step)
-                            self.writer.add_scalar('Speed/Backward_pass_duration_min', self.backward_pass_durations.min(), global_step=self.global_step)
-                            self.writer.add_scalar('Speed/Backward_pass_duration_max', self.backward_pass_durations.max(), global_step=self.global_step)
                         if 'state_values' in batch_info:
                             self.writer.add_histogram('state_values', batch_info['state_values'], global_step=self.global_step)
                             # todo: print state value samples every few steps
                         if 'action_advantages' in batch_info:
                             self.writer.add_histogram('action_advantages', batch_info['action_advantages'], global_step=self.global_step)
                             # todo: print action:advantage samples every few steps
+                        if 'policy_loss' in batch_info:
+                            self.writer.add_scalar('Policy/loss', batch_info['policy_loss'], global_step=self.global_step)
+                            self.writer.add_scalar('Policy/avg_entropy', batch_info['policy_avg_entropy'], global_step=self.global_step)
                         logging.debug('Done printing to tensorboard...')
                     self.loss_values.add(loss)
 
@@ -303,7 +322,7 @@ class Trainer:
 
             if e % 1 == 0:
                 logging.info(
-                    f"Ep {e}; {self.episode_cuml_rewards.last()} reward. 100 ep ravg: {np.floor(self.episode_cuml_rewards.mean())}. Eps {self.agent.epsilon:.2f}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
+                    f"Ep {e}; {self.episode_cuml_rewards.last()} reward. 100 ep ravg: {np.floor(self.episode_cuml_rewards.mean())}. Loss: {loss_min:.2f}|{loss_mean:.2f}|{loss_max:.2f}"
                 )
                 logging.info( f"Most recent ep info: {info}")
 
