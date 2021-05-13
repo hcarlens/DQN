@@ -2,7 +2,9 @@ import torch
 import random
 import logging
 import numpy as np
+import copy
 from pytorch_rl.base_agent import BaseAgent
+from pytorch_rl.utils import loss_functions, optimisers, create_sequential_model
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -39,7 +41,7 @@ class DQNAgent(BaseAgent):
 
         self.discount_rate = discount_rate
         self.q_network = QNetwork(main_net, final_layer_neurons, num_outputs, duelling=duelling)
-        self.target_network = QNetwork(main_net, final_layer_neurons, num_outputs, duelling=duelling)
+        self.target_network = QNetwork(copy.deepcopy(main_net), final_layer_neurons, num_outputs, duelling=duelling)
         self.loss_fn = loss_fn()
         self.optimiser = optimiser(params=self.q_network.parameters(), lr= learning_rate)
         self.gradient_clipping_value = gradient_clipping_value
@@ -57,6 +59,8 @@ class DQNAgent(BaseAgent):
         self.epsilon_decay_steps = epsilon_decay_steps
 
         self.epsilon = start_epsilon
+
+        self.name = 'DQN' # todo: make this more re-usable/ structured
 
         self.eval_mode = eval_mode # if true, use fully greedy policy (no epsilon-randomness)
 
@@ -177,14 +181,14 @@ class DQNAgent(BaseAgent):
                 # find the equivalent index in the unmasked array
                 max_unmasked_action_index = torch.arange(len(q_values))[mask][max_masked_action_index]
 
-                return max_unmasked_action_index
+                return max_unmasked_action_index.item()
             else:
                 # straightforward max over q-values
                 q_values = self.q_network(torch.tensor(observation, dtype=torch.float, device=self.device))
-                return q_values.max(0)[1].detach().cpu().numpy()
+                return q_values.max(0)[1].detach().cpu().numpy().item()
         else:  # random actions
             logging.debug('Taking random action. ')
             if action_mask is not None:
-                return np.random.choice(self.possible_actions[action_mask == 1])
+                return np.random.choice(self.possible_actions[action_mask == 1]).item()
             else:
-                return np.random.choice(self.possible_actions)
+                return np.random.choice(self.possible_actions).item()
