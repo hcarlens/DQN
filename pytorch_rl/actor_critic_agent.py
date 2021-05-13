@@ -7,6 +7,7 @@ from typing import Tuple
 from torch.distributions.categorical import Categorical
 
 from pytorch_rl.base_agent import BaseAgent
+from pytorch_rl.utils import loss_functions, optimisers, create_sequential_model
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -14,21 +15,37 @@ logging.getLogger().setLevel(logging.INFO)
 class ActorCriticAgent(BaseAgent):
     """
     Simple single-threaded actor/critic agent.
-    Based on OpenAI's simple pg example + Sutton and Barto.
+    Based loosely on OpenAI's simple pg example + Sutton and Barto.
         https://github.com/openai/spinningup/blob/master/spinup/examples/pytorch/pg_math/1_simple_pg.py
     Unlike the simple pg example, this agent uses a bootstrapped value function and so is fully on-line.
+
+    This probably shouldn't really work, since we're sampling off-policy from the memory buffer without any corrections.
+    But it seems to do ok...
      """
-    def __init__(self, policy_learning_rate: float, value_learning_rate: float, discount_rate: float, policy_net: torch.nn.Module,
-                 value_net: torch.nn.Module, loss_fn, optimiser, random_seed: int = None, cuda: bool = False):
-        
+    def __init__(self, discount_rate: float,
+                 action_space_dim: int,
+                 observation_space_dim: int,
+                 policy_net_layers_spec: Tuple,
+                 value_net_layers_spec: Tuple,
+                 loss_fn, optimiser, random_seed: int = None, cuda: bool = False,
+                 learning_rate: float = None,
+                 policy_learning_rate: float = None, value_learning_rate: float = None,
+            ):
+        """ `learning_rate` is a default for the policy and value learning rates, if those aren't specified."""
         if random_seed is not None:
             self.seed(random_seed)
 
         self.name = 'AC'
 
+        # fallback to default ( easier compatibility with DQN)
+        policy_learning_rate = policy_learning_rate or learning_rate
+        value_learning_rate = value_learning_rate or learning_rate
+
         self.discount_rate = discount_rate
-        self.policy_net = policy_net
-        self.value_net = value_net
+        self.policy_net = create_sequential_model(num_inputs=observation_space_dim, layers_spec=policy_net_layers_spec,
+                                             num_outputs=action_space_dim, dropout_rate=0, activation_function='relu', final_activation=False)
+        self.value_net = create_sequential_model(num_inputs=observation_space_dim, layers_spec=value_net_layers_spec,
+                                                  num_outputs=1, dropout_rate=0, activation_function='relu', final_activation=False)
         self.loss_fn = loss_fn()
         self.policy_optimiser = optimiser(params=self.policy_net.parameters(), lr=policy_learning_rate)
         self.value_optimiser = optimiser(params=self.value_net.parameters(), lr=value_learning_rate)

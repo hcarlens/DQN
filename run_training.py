@@ -14,8 +14,9 @@ from pytorch_rl.sanity_envs import SanityEnvV4, SanityEnvV5
 import argparse
 
 
-parser = argparse.ArgumentParser(description='Train a DQN agent on CartPole.')
+parser = argparse.ArgumentParser(description='Train an agent on CartPole.')
 parser.add_argument('--seed',  type=int, default=None, help='Random seed. ')
+parser.add_argument('--agent',  type=str, default='DQN', help='Type of agent. Currently supported: DQN, AC. ')
 parser.add_argument('--num_episodes',  type=int, default=5000, help='Number of episodes to train for. ')
 parser.add_argument('--loss_fn',  type=str, default='mse', help='Loss function. ')
 parser.add_argument('--optimiser',  type=str, default='adam', help='Loss function. ')
@@ -49,27 +50,41 @@ if args.seed is not None:
     np.random.seed(args.seed)
 
 layers_spec = tuple(int(x) for x in args.layers_spec.split('_'))
-dqn_net = create_sequential_model(num_inputs=env.observation_space.shape[0], layers_spec=layers_spec, num_outputs=args.final_layer_neurons,
-                                  dropout_rate=0, activation_function='relu', final_activation=True)
 
-duelling = True
-
-dqn_agent = DQNAgent(learning_rate=args.lr, 
+if args.agent == 'DQN':
+    agent = DQNAgent(learning_rate=args.lr,
+                         discount_rate=args.discount,
+                         action_space_dim=env.action_space.n,
+                         observation_space_dim=env.observation_space.shape[0],
+                         value_net_layer_spec=layers_spec,
+                         final_layer_neurons=args.final_layer_neurons,
+                         num_outputs=env.action_space.n,
+                         random_seed=args.seed,
+                         loss_fn=loss_fn,
+                         optimiser=optimiser,
+                         cuda=args.cuda,
+                        target_update_steps = args.target_update_steps,
+    )
+elif args.agent == 'AC':
+    agent = ActorCriticAgent(
+                     action_space_dim=env.action_space.n,
+                     observation_space_dim=env.observation_space.shape[0],
+                     policy_learning_rate=args.lr,
+                     value_learning_rate=args.lr,
                      discount_rate=args.discount,
-                     main_net=dqn_net,
-                     final_layer_neurons=args.final_layer_neurons,
-                     num_outputs=env.action_space.n,
+                     policy_net_layers_spec=layers_spec,
+                     value_net_layers_spec=layers_spec,
                      random_seed=args.seed,
                      loss_fn=loss_fn,
                      optimiser=optimiser,
                      cuda=args.cuda,
-                     duelling=duelling,
-                    target_update_steps = args.target_update_steps,
-)
+    )
+else:
+    raise ValueError(f'Unknown agent specified: {args.agent}')
 
 trainer = Trainer(
     env=env, 
-    agent=dqn_agent, 
+    agent=agent,
     memory_buffer=MemoryBuffer(buffer_length=args.buffer_length), 
     timestep_to_start_learning=args.timestep_to_start_learning,
     batch_size=args.batch_size,
@@ -77,7 +92,6 @@ trainer = Trainer(
     train_every_n_steps=args.train_every_n_steps,
     test_every_n_steps=args.test_every_n_steps,
     hparams={'lr': args.lr, 'dr': args.discount, 'layers': args.layers_spec, 'final_layer': args.final_layer_neurons,
-             'cuda': args.cuda, 'optimiser': args.optimiser, 'loss_fn': args.loss_fn, 'buffer_length': args.buffer_length,
-             'duelling': duelling}
+             'cuda': args.cuda, 'optimiser': args.optimiser, 'loss_fn': args.loss_fn, 'buffer_length': args.buffer_length,}
 )
 trainer.run(num_episodes=args.num_episodes)

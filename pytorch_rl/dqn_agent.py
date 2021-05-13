@@ -6,6 +6,8 @@ import copy
 from pytorch_rl.base_agent import BaseAgent
 from pytorch_rl.utils import loss_functions, optimisers, create_sequential_model
 
+from typing import Tuple
+
 logging.getLogger().setLevel(logging.INFO)
 
 class QNetwork(torch.nn.Module):
@@ -30,18 +32,26 @@ class QNetwork(torch.nn.Module):
         return qs
 
 class DQNAgent(BaseAgent):
-    def __init__(self, learning_rate: float, discount_rate: float, main_net: torch.nn.Module, final_layer_neurons: int,
-                 target_update_steps: int, num_outputs: int, loss_fn, optimiser, random_seed: int = None, duelling: bool = True,
+    def __init__(self, learning_rate: float,
+                 discount_rate: float,
+                 action_space_dim: int,
+                 observation_space_dim: int,
+                 value_net_layer_spec: Tuple,
+                 final_layer_neurons: int,
+                 target_update_steps: int,
+                 loss_fn, optimiser, random_seed: int = None, duelling: bool = True,
                  gradient_clipping_value=None, gradient_clipping_threshold=None, gradient_clipping_norm=None,
                  cuda: bool = False, train_mode: bool = False, start_epsilon: float = 1, end_epsilon: float = 0.01,
-                 epsilon_decay_steps: int = 10000, eval_mode: bool = False):
+                 epsilon_decay_steps: int = 10000, eval_mode: bool = False, **kwargs):
 
         if random_seed is not None:
             self.seed(random_seed)
 
         self.discount_rate = discount_rate
-        self.q_network = QNetwork(main_net, final_layer_neurons, num_outputs, duelling=duelling)
-        self.target_network = QNetwork(copy.deepcopy(main_net), final_layer_neurons, num_outputs, duelling=duelling)
+        main_net = create_sequential_model(num_inputs=observation_space_dim, layers_spec=value_net_layer_spec, num_outputs=final_layer_neurons,
+                                  dropout_rate=0, activation_function='relu', final_activation=True)
+        self.q_network = QNetwork(main_net, final_layer_neurons, action_space_dim, duelling=duelling)
+        self.target_network = QNetwork(copy.deepcopy(main_net), final_layer_neurons, action_space_dim, duelling=duelling)
         self.loss_fn = loss_fn()
         self.optimiser = optimiser(params=self.q_network.parameters(), lr= learning_rate)
         self.gradient_clipping_value = gradient_clipping_value
@@ -64,7 +74,7 @@ class DQNAgent(BaseAgent):
 
         self.eval_mode = eval_mode # if true, use fully greedy policy (no epsilon-randomness)
 
-        self.possible_actions = np.arange(num_outputs) # used for action sampling and masking
+        self.possible_actions = np.arange(action_space_dim) # used for action sampling and masking
 
         self.update_target_network()
 
