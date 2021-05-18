@@ -10,13 +10,15 @@ from pytorch_rl.actor_critic_agent import ActorCriticAgent
 from pytorch_rl.agent_trainer import Trainer
 from pytorch_rl.memory_buffer import MemoryBuffer
 from pytorch_rl.utils import loss_functions, optimisers, create_sequential_model
-from pytorch_rl.sanity_envs import SanityEnvV4, SanityEnvV5
+from pytorch_rl.sanity_envs import (SanityEnvV0, SanityEnvV1, SanityEnvV2,
+                                    SanityEnvV3, SanityEnvV4,
+                                    SanityEnvV5, SanityEnvV6)
 import argparse
 
 
 parser = argparse.ArgumentParser(description='Train an agent on CartPole.')
 parser.add_argument('--seed',  type=int, default=None, help='Random seed. ')
-parser.add_argument('--agent',  type=str, default='DQN', help='Type of agent. Currently supported: DQN, AC. ')
+parser.add_argument('--agent',  type=str, default='AC', help='Type of agent. Currently supported: DQN, AC. ')
 parser.add_argument('--num_episodes',  type=int, default=5000, help='Number of episodes to train for. ')
 parser.add_argument('--loss_fn',  type=str, default='mse', help='Loss function. ')
 parser.add_argument('--optimiser',  type=str, default='adam', help='Loss function. ')
@@ -38,7 +40,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 args = parser.parse_args()
 
-env = gym.make(args.gymenv)
+env = SanityEnvV4()
 
 loss_fn = loss_functions[args.loss_fn]
 optimiser = optimisers[args.optimiser]
