@@ -259,7 +259,7 @@ def test_sanity_env_v6():
         random_seed=RANDOM_SEED,
         max_num_steps=1000000,
         train_every_n_steps=2,
-        write_to_tensorboard=True
+        write_to_tensorboard=False
     )
     trainer.run(num_episodes=500)
 
